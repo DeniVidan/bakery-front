@@ -14,7 +14,8 @@ import {
   User, 
   Sunset,
   AlertCircle,
-  RotateCw
+  RotateCw,
+  ChevronDown
 } from 'lucide-react';
 
 const generateUpcomingDates = (bakingDays = ['Tuesday', 'Saturday'], count = 6, leadTimeHours = 72, bakeTimeOfDay = '06:00') => {
@@ -96,6 +97,7 @@ export default function CustomerDashboard() {
   const [orders, setOrders] = useState([]);
   const [standingOrders, setStandingOrders] = useState([]);
   const [cart, setCart] = useState([]);
+  const [isCartExpanded, setIsCartExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState('menu'); // menu | orders | profile
   const [loadingMenu, setLoadingMenu] = useState(true);
   const [loadingOrders, setLoadingOrders] = useState(true);
@@ -391,6 +393,7 @@ export default function CustomerDashboard() {
           : t('orderSubmittedSuccess', { defaultValue: 'Order submitted successfully! Our bakers are getting ready.' })
         );
         setCart([]);
+        setIsCartExpanded(false);
         setSaveAsStandingOrder(false);
         fetchOrders();
         fetchLoyaltyStatus(); // Dynamic sync
@@ -1240,34 +1243,266 @@ export default function CustomerDashboard() {
         )}
       </main>
 
-      {/* Mobile Sticky Floating Basket Bar */}
+      {/* Mobile Sticky Floating Basket Bar / Expandable Bottom Sheet */}
       {cart.length > 0 && (
-        <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 p-4 bg-gradient-to-t from-slate-100/90 via-slate-100/95 to-transparent dark:from-slate-950/90 dark:via-slate-950/95 dark:to-transparent backdrop-blur-md pointer-events-none">
-          <div className="max-w-md mx-auto pointer-events-auto">
-            <button
-              onClick={scrollToBasket}
-              className="w-full flex items-center justify-between animate-shimmer-brown animate-warm-glow text-white font-black text-xs uppercase tracking-wider py-4 px-5 sm:px-6 rounded-2xl shadow-2xl border border-bakery-500/30 animate-basket-slide"
+        <>
+          {/* Backdrop Blur Overlay when cart is expanded */}
+          {isCartExpanded && (
+            <div 
+              className="lg:hidden fixed inset-0 bg-black/60 backdrop-blur-xs z-50 transition-opacity duration-300 pointer-events-auto"
+              onClick={() => setIsCartExpanded(false)}
+            />
+          )}
+
+          {/* Bottom Sheet Modal */}
+          <div 
+            className={`lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-tr from-slate-50 via-white to-amber-50/20 dark:from-slate-950 dark:via-slate-900 dark:to-bakery-950/20 border-t border-slate-200 dark:border-slate-800 rounded-t-[2.5rem] shadow-2xl transition-transform duration-300 transform ${
+              isCartExpanded ? 'translate-y-0 pointer-events-auto animate-rise' : 'translate-y-full pointer-events-none'
+            }`}
+            style={{ maxHeight: '92vh' }}
+          >
+            {/* Grab / Drag Handle */}
+            <div 
+              className="flex justify-center py-3.5 cursor-pointer"
+              onClick={() => setIsCartExpanded(false)}
             >
-              <div className="flex items-center gap-3">
-                <div className="relative bg-white/10 p-2 rounded-xl border border-white/20">
-                  <ShoppingBag size={18} className="animate-pulse text-amber-100" />
-                  <span className={`absolute -top-1.5 -right-1.5 bg-amber-500 text-white text-[10px] font-extrabold w-4.5 h-4.5 rounded-full flex items-center justify-center border border-white dark:border-slate-900 shadow-sm ${badgeAnimate ? 'animate-badge-pop' : ''}`}>
+              <div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full" />
+            </div>
+
+            {/* Expanded Cart Content */}
+            <div className="px-5 sm:px-6 pb-8 overflow-y-auto" style={{ maxHeight: '84vh' }}>
+              <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-200 dark:border-slate-800">
+                <h2 className="text-base font-extrabold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                  <ShoppingBag size={18} className="text-bakery-500" />
+                  {t('myBakingBasket', { defaultValue: 'My Baking Basket' })}
+                  <span className="bg-bakery-500 text-white text-xs font-extrabold px-2 py-0.5 rounded-full">
                     {totalQty}
                   </span>
+                </h2>
+                <button 
+                  onClick={() => setIsCartExpanded(false)}
+                  className="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition"
+                >
+                  <ChevronDown size={18} />
+                </button>
+              </div>
+
+              {orderMessage && (
+                <div className="mb-4 p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-emerald-300 rounded-xl text-xs flex items-center gap-2">
+                  <CheckCircle size={16} />
+                  {orderMessage}
                 </div>
-                <div className="text-left leading-tight">
-                  <span className="block font-black text-[12px] tracking-wide text-white">{t('myBakingBasket', { defaultValue: 'My Baking Basket' })}</span>
-                  <span className="block text-[10px] text-amber-100 normal-case font-medium mt-0.5">{t('clickToReviewCheckout', { defaultValue: 'Tap to review & checkout' })}</span>
+              )}
+
+              {errorMessage && (
+                <div className="mb-4 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/40 text-red-800 dark:text-red-300 rounded-xl text-xs flex items-center gap-2">
+                  <AlertCircle size={16} />
+                  {errorMessage}
+                </div>
+              )}
+
+              {/* Coupons Banner */}
+              {loyaltyStatus && loyaltyStatus.freeRemaining > 0 && (
+                <div className="mb-4 p-3 bg-gradient-to-r from-amber-500/15 via-amber-600/10 to-transparent border border-amber-500/20 rounded-2xl text-xs relative overflow-hidden animate-rise">
+                  <div className="flex items-start gap-2.5">
+                    <span className="text-xl shrink-0">🎁</span>
+                    <div className="space-y-0.5">
+                      <h4 className="font-extrabold text-amber-800 dark:text-amber-400">
+                        {t('couponsAvailableTitle', { defaultValue: 'Available Loyalty Coupons' })}
+                      </h4>
+                      <p className="text-[10px] text-slate-600 dark:text-slate-400 leading-relaxed font-medium">
+                        {t('couponsAvailableDesc', { defaultValue: 'You have {count} free loaf coupon(s) ready to redeem! Apply them inline on your basket items below.', count: (loyaltyStatus?.freeRemaining || 0) - cart.reduce((sum, i) => sum + (i.couponApplied || 0), 0) })}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Itemized List */}
+              <div className="space-y-3 mb-4">
+                {cart.map((item) => {
+                  const totalAppliedCoupons = cart.reduce((sum, i) => sum + (i.couponApplied || 0), 0);
+                  const remainingCouponsToUse = (loyaltyStatus?.freeRemaining || 0) - totalAppliedCoupons;
+                  const hasApplied = item.couponApplied > 0;
+                  const canApply = remainingCouponsToUse > 0 && item.couponApplied < item.quantity;
+
+                  return (
+                    <div key={item.variant.id} className="p-3 rounded-2xl bg-white/40 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-800/40 text-xs space-y-2.5">
+                      <div className="flex items-center justify-between gap-2.5">
+                        <div className="min-w-0 flex-1">
+                          <h4 className="font-bold truncate text-slate-800 dark:text-slate-100">{item.product.name}</h4>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5 truncate">{item.variant.size}</span>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0 ml-2">
+                          {/* Quantity controls */}
+                          <div className="flex items-center bg-slate-200 dark:bg-slate-800 rounded-lg p-0.5">
+                            <button 
+                              onClick={() => updateQty(item.variant.id, -1)}
+                              className="w-5 h-5 flex items-center justify-center font-bold text-xs hover:bg-white dark:hover:bg-slate-700 rounded transition"
+                            >
+                              -
+                            </button>
+                            <span className="w-6 text-center font-bold text-xs">{item.quantity}</span>
+                            <button 
+                              onClick={() => updateQty(item.variant.id, 1)}
+                              className="w-5 h-5 flex items-center justify-center font-bold text-xs hover:bg-white dark:hover:bg-slate-700 rounded transition"
+                            >
+                              +
+                            </button>
+                          </div>
+
+                          {/* Price */}
+                          <span className="font-bold text-slate-700 dark:text-slate-300 min-w-[42px] text-right text-xs">
+                            {hasApplied ? (
+                              <div className="flex flex-col items-end">
+                                <span className="line-through text-slate-400 text-[10px]">
+                                  ${(item.variant.price * item.quantity).toFixed(2)}
+                                </span>
+                                <span className="text-emerald-600 dark:text-emerald-400 font-extrabold text-xs">
+                                  {item.quantity === item.couponApplied 
+                                    ? t('freeLabel', { defaultValue: 'FREE' }) 
+                                    : `$${(item.variant.price * (item.quantity - item.couponApplied)).toFixed(2)}`}
+                                </span>
+                              </div>
+                            ) : (
+                              `$${(item.variant.price * item.quantity).toFixed(2)}`
+                            )}
+                          </span>
+
+                          {/* Delete button */}
+                          <button
+                            onClick={() => removeFromCart(item.variant.id)}
+                            className="text-slate-400 hover:text-red-500 transition p-1"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Inline Coupon Controls */}
+                      {(hasApplied || canApply) && (
+                        <div className="border-t border-dashed border-slate-100 dark:border-slate-800/60 pt-2 flex flex-wrap items-center justify-between gap-2">
+                          {hasApplied ? (
+                            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 dark:bg-emerald-950/20 border border-emerald-500/25 text-emerald-800 dark:text-emerald-400 text-[10px] font-bold">
+                              <span>🎁</span>
+                              <span>{t('appliedCouponPill', { defaultValue: 'Coupon Applied' })} (x{item.couponApplied})</span>
+                              <button 
+                                onClick={() => removeCoupon(item.variant.id)}
+                                className="ml-1.5 w-4 h-4 rounded-full bg-emerald-500 text-white hover:bg-emerald-600 flex items-center justify-center font-bold text-[9px] transition"
+                                title="Remove Coupon"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ) : <div />}
+
+                          {canApply && (
+                            <button
+                              onClick={() => applyCoupon(item.variant.id)}
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-black bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white shadow shadow-amber-500/10 hover:shadow-amber-500/25 transition active:scale-95 ml-auto"
+                            >
+                              <span>🎁</span>
+                              <span>{t('applyCouponBtn', { defaultValue: 'Use Coupon' })}</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Slot Selector & Subscription */}
+              <div className="border-t border-slate-200 dark:border-slate-800 pt-4 space-y-4">
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                    🕒 {t('collectionTimeSlot', { defaultValue: 'Select Collection Time Slot' })}
+                  </label>
+                  <select
+                    value={selectedSlot}
+                    onChange={(e) => setSelectedSlot(e.target.value)}
+                    className="w-full text-xs p-2.5 border rounded-xl dark:bg-slate-900 dark:border-slate-800 bg-white dark:bg-slate-950 dark:text-slate-100 font-semibold"
+                  >
+                    {upcomingDates.map((date) => {
+                      const yyyymmdd = date.toISOString().split('T')[0];
+                      return (
+                        <option key={yyyymmdd} value={yyyymmdd}>
+                          {formatBakingDate(date, currentLanguage)}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                <label className="flex items-start gap-2.5 p-3 rounded-2xl bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/20 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={saveAsStandingOrder}
+                    onChange={(e) => setSaveAsStandingOrder(e.target.checked)}
+                    className="w-4 h-4 rounded text-bakery-500 border-slate-300 mt-0.5"
+                  />
+                  <div className="text-xs">
+                    <span className="font-extrabold text-amber-800 dark:text-amber-400 block">{t('recurringWeeklySubscription', { defaultValue: 'Weekly Subscription' })}</span>
+                    <span className="text-[10px] text-slate-500 block leading-relaxed mt-0.5">
+                      {t('saveAsStandingOrderDesc', { defaultValue: "Save as my repeating Weekly Standing Order! We will auto-book this for you every week if these items are active." })}
+                    </span>
+                  </div>
+                </label>
+              </div>
+
+              {/* Summary */}
+              <div className="border-t border-slate-200 dark:border-slate-800 pt-4 space-y-2">
+                <div className="flex items-center justify-between text-xs text-slate-500">
+                  <span>{t('itemsCount', { defaultValue: 'Items Count' })}</span>
+                  <span>{totalQty}</span>
+                </div>
+                <div className="flex items-center justify-between text-base font-extrabold text-slate-800 dark:text-slate-100">
+                  <span>{t('totalAmount', { defaultValue: 'Total Amount:' })}</span>
+                  <span>${totalCartPrice.toFixed(2)}</span>
                 </div>
               </div>
-              
-              <div className="flex items-center gap-2 bg-white/10 hover:bg-white/20 transition duration-200 px-3 py-1.5 rounded-xl border border-white/10">
-                <span className="text-xs font-black tracking-wide">${totalCartPrice.toFixed(2)}</span>
-                <span className="text-sm font-black">→</span>
-              </div>
-            </button>
+
+              {/* Checkout Button */}
+              <button
+                onClick={submitOrder}
+                className="w-full mt-4 bg-gradient-to-r from-bakery-500 to-bakery-600 text-white font-extrabold py-3.5 rounded-xl shadow-lg hover:shadow-bakery-500/25 transition duration-300 text-xs uppercase font-black tracking-wider"
+              >
+                {saveAsStandingOrder ? t('lockInAndSubscribe', { defaultValue: 'Lock In & Subscribe' }) : t('lockOrderSubmit', { defaultValue: 'Lock In Order' })}
+              </button>
+            </div>
           </div>
-        </div>
+
+          {/* Compact Sticky Summary Bar (Visible only when sheet is collapsed) */}
+          {!isCartExpanded && (
+            <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 p-4 bg-gradient-to-t from-slate-100/90 via-slate-100/95 to-transparent dark:from-slate-950/90 dark:via-slate-950/95 dark:to-transparent backdrop-blur-md pointer-events-none">
+              <div className="max-w-md mx-auto pointer-events-auto">
+                <button
+                  onClick={() => setIsCartExpanded(true)}
+                  className="w-full flex items-center justify-between animate-shimmer-brown animate-warm-glow text-white font-black text-xs uppercase tracking-wider py-4 px-5 sm:px-6 rounded-2xl shadow-2xl border border-bakery-500/30 animate-basket-slide"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="relative bg-white/10 p-2 rounded-xl border border-white/20">
+                      <ShoppingBag size={18} className="animate-pulse text-amber-100" />
+                      <span className={`absolute -top-1.5 -right-1.5 bg-amber-500 text-white text-[10px] font-extrabold w-4.5 h-4.5 rounded-full flex items-center justify-center border border-white dark:border-slate-900 shadow-sm ${badgeAnimate ? 'animate-badge-pop' : ''}`}>
+                        {totalQty}
+                      </span>
+                    </div>
+                    <div className="text-left leading-tight">
+                      <span className="block font-black text-[12px] tracking-wide text-white">{t('myBakingBasket', { defaultValue: 'My Baking Basket' })}</span>
+                      <span className="block text-[10px] text-amber-100 normal-case font-medium mt-0.5">{t('clickToReviewCheckout', { defaultValue: 'Tap to review & checkout' })}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-2 bg-white/10 hover:bg-white/20 transition duration-200 px-3 py-1.5 rounded-xl border border-white/10">
+                    <span className="text-xs font-black tracking-wide">${totalCartPrice.toFixed(2)}</span>
+                    <span className="text-sm font-black">→</span>
+                  </div>
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

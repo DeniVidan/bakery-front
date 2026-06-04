@@ -155,6 +155,7 @@ export default function AdminDashboard() {
   const [tempWaterParts, setTempWaterParts] = useState(2);
   const [tempStarterFlours, setTempStarterFlours] = useState([]); // [{ name: 'Bread Flour', percentage: 100 }]
   const [tempFeedingMethod, setTempFeedingMethod] = useState('method-a');
+  const [starterOverrides, setStarterOverrides] = useState({});
 
   const [pantryStock, setPantryStock] = useState({
     "Manitoba": 10.0,
@@ -836,10 +837,19 @@ export default function AdminDashboard() {
 
           if (data.settings.starters) {
             try {
-              const loadedStarters = JSON.parse(data.settings.starters).map(s => ({
-                ...s,
-                feedingMethod: s.feedingMethod || 'method-a'
-              }));
+              const loadedStarters = JSON.parse(data.settings.starters).map(s => {
+                const floursBreakdown = (s.floursBreakdown || []).map(f => {
+                  if (f.name === 'Bread Flour') {
+                    return { ...f, name: 'Manitoba' };
+                  }
+                  return f;
+                });
+                return {
+                  ...s,
+                  floursBreakdown,
+                  feedingMethod: s.feedingMethod || 'method-a'
+                };
+              });
               setStarters(loadedStarters);
               const std = loadedStarters.find(s => s.id === 'standard-starter');
               if (std) {
@@ -853,7 +863,7 @@ export default function AdminDashboard() {
                   seedParts: 1,
                   flourParts: 2,
                   waterParts: 2,
-                  floursBreakdown: [{ name: 'Bread Flour', percentage: 100 }],
+                  floursBreakdown: [{ name: 'Manitoba', percentage: 100 }],
                   feedingMethod: 'method-a'
                 }
               ]);
@@ -866,7 +876,7 @@ export default function AdminDashboard() {
                 seedParts: 1,
                 flourParts: 2,
                 waterParts: 2,
-                floursBreakdown: [{ name: 'Bread Flour', percentage: 100 }],
+                floursBreakdown: [{ name: 'Manitoba', percentage: 100 }],
                 feedingMethod: 'method-a'
               }
             ]);
@@ -1824,16 +1834,17 @@ export default function AdminDashboard() {
         const target = Math.round(sb.grams);
         if (target <= 0) return;
 
-        const profile = starters.find(s => s.name === sb.name) || {
+        const activeStarterName = starterOverrides[sb.name] || sb.name;
+        const profile = starters.find(s => s.name === activeStarterName) || {
           id: 'standard-starter',
-          name: sb.name || 'Standard Sourdough Starter',
+          name: activeStarterName || 'Standard Sourdough Starter',
           seedParts: 1,
           flourParts: 2,
           waterParts: 2,
-          floursBreakdown: [{ name: 'Bread Flour', percentage: 100 }]
+          floursBreakdown: [{ name: 'Manitoba', percentage: 100 }]
         };
 
-        const isStandard = sb.name === 'Standard Sourdough Starter';
+        const isStandard = activeStarterName === 'Standard Sourdough Starter';
         const isMethodB = profile.feedingMethod === 'method-b';
         const totalTarget = target + starterReserve;
 
@@ -1865,7 +1876,7 @@ export default function AdminDashboard() {
         }
 
         if (feedFlour > 0) {
-          const floursBreakdown = profile.floursBreakdown || [{ name: 'Bread Flour', percentage: 100 }];
+          const floursBreakdown = profile.floursBreakdown || [{ name: 'Manitoba', percentage: 100 }];
           floursBreakdown.forEach((fb) => {
             const fbGrams = Math.ceil(feedFlour * (fb.percentage / 100));
             feedingFloursMap[fb.name] = (feedingFloursMap[fb.name] || 0) + fbGrams;
@@ -2449,38 +2460,64 @@ export default function AdminDashboard() {
                     {calculations.summary.startersBreakdown && calculations.summary.startersBreakdown.length > 0 && (
                       <div className="space-y-4">
                         {calculations.summary.startersBreakdown.map((sb) => {
-                          const isStandard = sb.name === 'Standard Sourdough Starter';
+                          const activeStarterName = starterOverrides[sb.name] || sb.name;
+                          const isStandard = activeStarterName === 'Standard Sourdough Starter';
                           const target = Math.round(sb.grams);
                           if (target <= 0) return null;
 
                           // Find configuration profile
-                          const profile = starters.find(s => s.name === sb.name) || {
+                          const profile = starters.find(s => s.name === activeStarterName) || {
                             id: 'standard-starter',
-                            name: sb.name || 'Standard Sourdough Starter',
+                            name: activeStarterName || 'Standard Sourdough Starter',
                             seedParts: 1,
                             flourParts: 2,
                             waterParts: 2,
-                            floursBreakdown: [{ name: 'Bread Flour', percentage: 100 }]
+                            floursBreakdown: [{ name: 'Manitoba', percentage: 100 }]
                           };
 
                           if (isStandard) {
                             // Render standard, fully interactive card
                             return (
                               <div key={profile.id} className="glass-card rounded-3xl p-5 border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/10 space-y-4 animate-rise">
-                                <div className="flex items-center justify-between pb-2 border-b border-amber-500/10">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-amber-500/10">
                                   <div className="flex items-center gap-2">
                                     <span className="text-lg">🧪</span>
                                     <div>
                                       <h4 className="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                                        {t('starterFeedingAssistant', { defaultValue: 'Standard Sourdough Starter Feeding Assistant' })}
+                                        {profile.name} Feeding Assistant
                                       </h4>
                                       <p className="text-[10px] text-slate-400">
                                         {t('starterFeedingDesc', { defaultValue: 'Calculate exact proportions to scale up your starter seed to the required weight tonight.' })}
                                       </p>
                                     </div>
                                   </div>
-                                  <div className="bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-lg text-[9px] font-black tracking-wide">
-                                    ⚙️ {profile.feedingMethod === 'method-b' ? 'Adaptive / Zero-Waste' : 'Preset Ratio'}
+
+                                  {/* Starter Profile Selector */}
+                                  <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">
+                                        Starter:
+                                      </span>
+                                      <select
+                                        value={activeStarterName}
+                                        onChange={(e) => {
+                                          setStarterOverrides({
+                                            ...starterOverrides,
+                                            [sb.name]: e.target.value
+                                          });
+                                        }}
+                                        className="py-1 px-2.5 text-[11px] font-extrabold rounded-xl border border-amber-500/20 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                                      >
+                                        {starters.map(s => (
+                                          <option key={s.id} value={s.name}>
+                                            {s.name}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                    <div className="bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-lg text-[9px] font-black tracking-wide whitespace-nowrap">
+                                      ⚙️ {profile.feedingMethod === 'method-b' ? 'Adaptive' : 'Preset'}
+                                    </div>
                                   </div>
                                 </div>
 
@@ -2687,194 +2724,241 @@ export default function AdminDashboard() {
                             const sumParts = seedPart + flourPart + waterPart;
 
                             const totalTarget = target + starterReserve;
-                            const floursBreakdown = profile.floursBreakdown || [{ name: 'Bread Flour', percentage: 100 }];
+                            const floursBreakdown = profile.floursBreakdown || [{ name: 'Manitoba', percentage: 100 }];
 
                             const isMethodB = profile.feedingMethod === 'method-b';
 
-                            if (isMethodB) {
-                              // Method B Adaptive / Zero-Waste Calculations for Custom Starter
-                              if (availableStarterSeed >= totalTarget) {
-                                return (
-                                  <div key={profile.id} className="glass-card rounded-3xl p-5 border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/10 space-y-4 animate-rise">
-                                    <div className="flex items-center justify-between pb-2 border-b border-amber-500/10">
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-lg">🧪</span>
-                                        <div>
-                                          <h4 className="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                                            {profile.name} Feeding Assistant
-                                          </h4>
-                                          <p className="text-[10px] text-slate-400">
-                                            Adaptive Zero-Waste feeding using {availableStarterSeed}g seed.
-                                          </p>
-                                        </div>
-                                      </div>
-                                      <div className="bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-lg text-[9px] font-black tracking-wide">
-                                        ⚙️ Adaptive / Zero-Waste
-                                      </div>
-                                    </div>
-                                    <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white/40 dark:bg-slate-900/40 flex flex-col items-center justify-center text-center space-y-1">
-                                      <span className="text-[10px] text-slate-400">
-                                        You already have enough starter seed ({availableStarterSeed}g) to meet the total required weight ({totalTarget}g) including reserve!
-                                      </span>
-                                      <span className="text-[9px] text-emerald-600 font-semibold">
-                                        No scale-up feeding is needed. After using {target}g for baking, you will have {availableStarterSeed - target}g left.
-                                      </span>
-                                    </div>
-                                  </div>
-                                );
-                              }
-
-                              const remainingWeight = totalTarget - availableStarterSeed;
-                              const totalFeedParts = flourPart + waterPart;
-                              const feedFlour = Math.ceil(remainingWeight * (flourPart / totalFeedParts));
-                              const feedWater = Math.ceil(remainingWeight * (waterPart / totalFeedParts));
-                              const ratioMultiplierFlour = (feedFlour / availableStarterSeed).toFixed(1);
-                              const ratioMultiplierWater = (feedWater / availableStarterSeed).toFixed(1);
-
-                              return (
-                                <div key={profile.id} className="glass-card rounded-3xl p-5 border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/10 space-y-4 animate-rise">
-                                  <div className="flex items-center justify-between pb-2 border-b border-amber-500/10">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-lg">🧪</span>
-                                      <div>
-                                        <h4 className="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                                          {profile.name} Feeding Assistant
-                                        </h4>
-                                        <p className="text-[10px] text-slate-400">
-                                          ⚡ Method B (Adaptive / Zero-Waste): Scaling up from {availableStarterSeed}g of seed.
-                                        </p>
-                                      </div>
-                                    </div>
-                                    <div className="text-right flex flex-col items-end gap-1">
-                                      <div className="bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-lg text-[9px] font-black tracking-wide">
-                                        ⚙️ Adaptive / Zero-Waste
-                                      </div>
-                                      <div className="text-xs font-black text-slate-700 dark:text-slate-200">🎯 Target: {totalTarget}g</div>
-                                      <div className="text-[9px] text-slate-400">Bake: {target}g | Reserve: {starterReserve}g</div>
+                            return (
+                              <div key={profile.id} className="glass-card rounded-3xl p-5 border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/10 space-y-4 animate-rise">
+                                {/* Header */}
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-amber-500/10">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-lg">🧪</span>
+                                    <div>
+                                      <h4 className="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                                        {profile.name} Feeding Assistant
+                                      </h4>
+                                      <p className="text-[10px] text-slate-400">
+                                        {isMethodB 
+                                          ? `Adaptive Zero-Waste feeding using ${availableStarterSeed}g seed.`
+                                          : `Ratio (${seedPart}:${flourPart}:${waterPart}) targeting baking needs + {starterReserve}g leftover.`}
+                                      </p>
                                     </div>
                                   </div>
 
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {/* Left: Ingredient Weights */}
-                                    <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white/40 dark:bg-slate-900/40 space-y-2">
-                                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-600 dark:text-amber-400 block">
-                                        ⚡ Adaptive Feeding Recipe
+                                  {/* Starter Profile Selector */}
+                                  <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">
+                                        Starter:
                                       </span>
-                                      <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
-                                        <div className="flex justify-between border-b dark:border-slate-800 pb-1">
-                                          <span>🧪 {t('useStarterSeed', { defaultValue: 'Use ALL Starter Seed' })}:</span>
-                                          <strong className="font-mono text-slate-800 dark:text-slate-100">{availableStarterSeed} g</strong>
-                                        </div>
-                                        <div className="flex justify-between border-b dark:border-slate-800 pb-1">
-                                          <span>💧 {t('addWater', { defaultValue: 'Add Water' })}:</span>
-                                          <strong className="font-mono text-slate-800 dark:text-slate-100">{feedWater} g</strong>
-                                        </div>
-                                        <div className="flex justify-between font-bold text-slate-700 dark:text-slate-200 pt-0.5">
-                                          <span>🥖 {t('addFlour', { defaultValue: 'Add Flour' })}:</span>
-                                          <strong className="font-mono">{feedFlour} g</strong>
-                                        </div>
-                                      </div>
+                                      <select
+                                        value={activeStarterName}
+                                        onChange={(e) => {
+                                          setStarterOverrides({
+                                            ...starterOverrides,
+                                            [sb.name]: e.target.value
+                                          });
+                                        }}
+                                        className="py-1 px-2.5 text-[11px] font-extrabold rounded-xl border border-amber-500/20 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                                      >
+                                        {starters.map(s => (
+                                          <option key={s.id} value={s.name}>
+                                            {s.name}
+                                          </option>
+                                        ))}
+                                      </select>
                                     </div>
-
-                                    {/* Right: Flour Composition Breakdown */}
-                                    <div className="p-4 rounded-xl border border-amber-500/10 bg-amber-500/5 dark:bg-amber-950/5 space-y-2">
-                                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-600 dark:text-amber-400 block">
-                                        🌾 flour types breakdown ({feedFlour}g)
-                                      </span>
-                                      <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
-                                        {floursBreakdown.map((fb, fbIdx) => {
-                                          const fbGrams = Math.ceil(feedFlour * (fb.percentage / 100));
-                                          return (
-                                            <div key={fbIdx} className="flex justify-between items-center border-b border-amber-500/5 pb-1">
-                                              <span className="font-medium text-slate-600 dark:text-slate-300">
-                                                🌾 {fb.name} <span className="text-[9px] text-slate-400">({fb.percentage}%)</span>
-                                              </span>
-                                              <strong className="font-mono text-amber-600 dark:text-amber-400">{fbGrams} g</strong>
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <div className="text-[9px] text-amber-600 dark:text-amber-400 font-medium pt-1.5 border-t border-amber-500/10 leading-relaxed animate-rise">
-                                    🚀 Feeds to a total of <strong>{availableStarterSeed + feedFlour + feedWater}g</strong> (Ratio <strong>1 : {ratioMultiplierFlour} : {ratioMultiplierWater}</strong>). After baking with <strong>{target}g</strong>, exactly <strong>{availableStarterSeed + feedFlour + feedWater - target}g</strong> of starter remains in your jar!
-                                  </div>
-                                </div>
-                              );
-                            } else {
-                              // Method A (Preset Ratio) Calculations for Custom Starter
-                              const reqSeed = Math.ceil(totalTarget / sumParts);
-                              const reqFlour = Math.ceil(reqSeed * flourPart);
-                              const reqWater = Math.ceil(reqSeed * waterPart);
-
-                              return (
-                                <div key={profile.id} className="glass-card rounded-3xl p-5 border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/10 space-y-4 animate-rise">
-                                  <div className="flex items-center justify-between pb-2 border-b border-amber-500/10">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-lg">🧪</span>
-                                      <div>
-                                        <h4 className="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                                          {profile.name} Feeding Assistant
-                                        </h4>
-                                        <p className="text-[10px] text-slate-400">
-                                          Ratio ({seedPart}:{flourPart}:{waterPart}) targeting baking needs + {starterReserve}g leftover.
-                                        </p>
-                                      </div>
-                                    </div>
-                                    <div className="text-right flex flex-col items-end gap-1">
-                                      <div className="bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-lg text-[9px] font-black tracking-wide">
-                                        ⚙️ Preset Ratio (Method A)
-                                      </div>
-                                      <div className="text-xs font-black text-slate-700 dark:text-slate-200">🎯 Target: {totalTarget}g</div>
-                                      <div className="text-[9px] text-slate-400">Bake: {target}g | Reserve: {starterReserve}g</div>
-                                    </div>
-                                  </div>
-
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {/* Left: Ingredient Weights */}
-                                    <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white/40 dark:bg-slate-900/40 space-y-2">
-                                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">
-                                        📋 feeding recipe (Ratio {seedPart}:{flourPart}:{waterPart})
-                                      </span>
-                                      <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
-                                        <div className="flex justify-between border-b dark:border-slate-800 pb-1">
-                                          <span>🧪 {t('starterSeed', { defaultValue: 'Starter Seed' })}:</span>
-                                          <strong className="font-mono text-slate-800 dark:text-slate-100">{reqSeed} g</strong>
-                                        </div>
-                                        <div className="flex justify-between border-b dark:border-slate-800 pb-1">
-                                          <span>💧 {t('water', { defaultValue: 'Water' })}:</span>
-                                          <strong className="font-mono text-slate-800 dark:text-slate-100">{reqWater} g</strong>
-                                        </div>
-                                        <div className="flex justify-between font-bold text-slate-700 dark:text-slate-200 pt-0.5">
-                                          <span>🥖 {t('totalFlour', { defaultValue: 'Total Flour' })}:</span>
-                                          <strong className="font-mono">{reqFlour} g</strong>
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                    {/* Right: Flour Composition Breakdown */}
-                                    <div className="p-4 rounded-xl border border-amber-500/10 bg-amber-500/5 dark:bg-amber-950/5 space-y-2">
-                                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-600 dark:text-amber-400 block">
-                                        🌾 flour types breakdown
-                                      </span>
-                                      <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
-                                        {floursBreakdown.map((fb, fbIdx) => {
-                                          const fbGrams = Math.ceil(reqFlour * (fb.percentage / 100));
-                                          return (
-                                            <div key={fbIdx} className="flex justify-between items-center border-b border-amber-500/5 pb-1">
-                                              <span className="font-medium text-slate-600 dark:text-slate-300">
-                                                🌾 {fb.name} <span className="text-[9px] text-slate-400">({fb.percentage}%)</span>
-                                              </span>
-                                              <strong className="font-mono text-amber-600 dark:text-amber-400">{fbGrams} g</strong>
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
+                                    <div className="bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-lg text-[9px] font-black tracking-wide whitespace-nowrap">
+                                      ⚙️ {isMethodB ? 'Adaptive' : 'Preset'}
                                     </div>
                                   </div>
                                 </div>
-                              );
-                            }
+
+                                {/* Seed & Reserve Inputs */}
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                                      {t('availableSeedLabel', { defaultValue: 'Starter seed in your jar (g)' })}
+                                    </label>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      value={availableStarterSeed}
+                                      onChange={(e) => {
+                                        const val = parseInt(e.target.value, 10);
+                                        if (!isNaN(val) && val >= 1) {
+                                          setAvailableStarterSeed(val);
+                                        }
+                                      }}
+                                      className="p-2 w-full text-xs rounded-xl border dark:bg-slate-950 dark:border-slate-800 bg-white font-semibold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                                    />
+                                  </div>
+
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                                      {t('desiredReserveLabel', { defaultValue: 'Desired leftover in jar (g)' })}
+                                    </label>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={starterReserve}
+                                      onChange={(e) => {
+                                        const val = parseInt(e.target.value, 10);
+                                        if (!isNaN(val) && val >= 0) {
+                                          setStarterReserve(val);
+                                        }
+                                      }}
+                                      className="p-2 w-full text-xs rounded-xl border dark:bg-slate-950 dark:border-slate-800 bg-white font-semibold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                                    />
+                                  </div>
+                                  
+                                  <div className="bg-slate-950/10 dark:bg-slate-950/40 p-3 rounded-xl border border-slate-200/50 dark:border-slate-800/50 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                                    🎯 {t('bakingTarget', { defaultValue: 'Baking Target' })}: <strong className="text-slate-700 dark:text-slate-200">{target}g</strong><br />
+                                    📈 {t('totalWithReserve', { defaultValue: 'Total Target (incl. reserve)' })}: <strong className="text-slate-700 dark:text-slate-200">{target + starterReserve}g</strong>
+                                  </div>
+                                </div>
+
+                                {/* Calculation Results splits */}
+                                <div className="grid grid-cols-1 gap-4 pt-1">
+                                  {isMethodB ? (
+                                    /* Method B: Use All available seed card */
+                                    (() => {
+                                      if (availableStarterSeed >= totalTarget) {
+                                        return (
+                                          <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800/80 bg-white/40 dark:bg-slate-900/40 flex flex-col items-center justify-center text-center space-y-1">
+                                            <span className="text-xs text-slate-400">
+                                              You already have enough starter seed ({availableStarterSeed}g) to meet the total required weight ({totalTarget}g) including reserve!
+                                            </span>
+                                            <span className="text-xs text-emerald-600 font-semibold mt-1">
+                                              No scale-up feeding is needed. After using {target}g for baking, you will have {availableStarterSeed - target}g left.
+                                            </span>
+                                          </div>
+                                        );
+                                      }
+
+                                      const remainingWeight = totalTarget - availableStarterSeed;
+                                      const totalFeedParts = flourPart + waterPart;
+                                      const feedFlour = Math.ceil(remainingWeight * (flourPart / totalFeedParts));
+                                      const feedWater = Math.ceil(remainingWeight * (waterPart / totalFeedParts));
+                                      const ratioMultiplierFlour = (feedFlour / availableStarterSeed).toFixed(1);
+                                      const ratioMultiplierWater = (feedWater / availableStarterSeed).toFixed(1);
+
+                                      return (
+                                        <div className="p-5 rounded-2xl border border-amber-500/15 bg-amber-500/5 dark:bg-amber-950/5 space-y-3 animate-rise">
+                                          <span className="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 block">
+                                            ⚡ Method B: Use ALL of your {availableStarterSeed}g Seed
+                                          </span>
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {/* Left: Ingredient Weights */}
+                                            <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                                              <div className="flex justify-between border-b dark:border-slate-800 pb-1.5">
+                                                <span>🧪 {t('useStarterSeed', { defaultValue: 'Use ALL Starter Seed' })}:</span>
+                                                <strong className="font-mono text-slate-800 dark:text-slate-100">{availableStarterSeed} g</strong>
+                                              </div>
+                                              <div className="flex justify-between border-b dark:border-slate-800 pb-1.5">
+                                                <span>💧 {t('addWater', { defaultValue: 'Add Water' })}:</span>
+                                                <strong className="font-mono text-slate-800 dark:text-slate-100">{feedWater} g</strong>
+                                              </div>
+                                              <div className="flex justify-between font-bold text-slate-700 dark:text-slate-200 pt-0.5">
+                                                <span>🥖 {t('addFlour', { defaultValue: 'Add Flour' })}:</span>
+                                                <strong className="font-mono">{feedFlour} g</strong>
+                                              </div>
+                                            </div>
+
+                                            {/* Right: Flour Composition Breakdown */}
+                                            <div className="p-4 rounded-xl border border-amber-500/10 bg-amber-500/5 dark:bg-amber-950/5 space-y-2">
+                                              <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-600 dark:text-amber-400 block">
+                                                🌾 flour types breakdown ({feedFlour}g)
+                                              </span>
+                                              <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
+                                                {floursBreakdown.map((fb, fbIdx) => {
+                                                  const fbGrams = Math.ceil(feedFlour * (fb.percentage / 100));
+                                                  return (
+                                                    <div key={fbIdx} className="flex justify-between items-center border-b border-amber-500/5 pb-1">
+                                                      <span className="font-medium text-slate-600 dark:text-slate-300">
+                                                        🌾 {fb.name} <span className="text-[9px] text-slate-400">({fb.percentage}%)</span>
+                                                      </span>
+                                                      <strong className="font-mono text-amber-600 dark:text-amber-400">{fbGrams} g</strong>
+                                                    </div>
+                                                  );
+                                                })}
+                                              </div>
+                                            </div>
+                                          </div>
+                                          <div className="text-[10px] text-amber-600 dark:text-amber-400 font-medium pt-2 border-t border-amber-500/10 leading-relaxed">
+                                            🚀 This feeds your seed to a total of <strong>{availableStarterSeed + feedFlour + feedWater}g</strong> (Ratio <strong>1 : {ratioMultiplierFlour} : {ratioMultiplierWater}</strong>). After baking with <strong>{target}g</strong>, exactly <strong>{availableStarterSeed + feedFlour + feedWater - target}g</strong> of starter remains in your jar!
+                                          </div>
+                                        </div>
+                                      );
+                                    })()
+                                  ) : (
+                                    /* Method A: Standard ratio card */
+                                    (() => {
+                                      const reqSeed = Math.ceil(totalTarget / sumParts);
+                                      const reqFlour = Math.ceil(reqSeed * flourPart);
+                                      const reqWater = Math.ceil(reqSeed * waterPart);
+                                      const extraSeedInJar = availableStarterSeed - reqSeed;
+
+                                      return (
+                                        <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800/80 bg-white/40 dark:bg-slate-900/40 space-y-3 animate-rise">
+                                          <span className="text-xs font-black uppercase tracking-wider text-slate-400 block">
+                                            📋 Method A: Preset Ratio ({seedPart}:{flourPart}:{waterPart})
+                                          </span>
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {/* Left: Ingredient Weights */}
+                                            <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                                              <div className="flex justify-between border-b dark:border-slate-800 pb-1.5">
+                                                <span>🧪 {t('starterSeed', { defaultValue: 'Starter Seed' })}:</span>
+                                                <strong className="font-mono text-slate-800 dark:text-slate-100">{reqSeed} g</strong>
+                                              </div>
+                                              <div className="flex justify-between border-b dark:border-slate-800 pb-1.5">
+                                                <span>💧 {t('water', { defaultValue: 'Water' })}:</span>
+                                                <strong className="font-mono text-slate-800 dark:text-slate-100">{reqWater} g</strong>
+                                              </div>
+                                              <div className="flex justify-between font-bold text-slate-700 dark:text-slate-200 pt-0.5">
+                                                <span>🥖 {t('totalFlour', { defaultValue: 'Total Flour' })}:</span>
+                                                <strong className="font-mono">{reqFlour} g</strong>
+                                              </div>
+                                            </div>
+
+                                            {/* Right: Flour Composition Breakdown */}
+                                            <div className="p-4 rounded-xl border border-amber-500/10 bg-amber-500/5 dark:bg-amber-950/5 space-y-2">
+                                              <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-600 dark:text-amber-400 block">
+                                                🌾 flour types breakdown ({reqFlour}g)
+                                              </span>
+                                              <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
+                                                {floursBreakdown.map((fb, fbIdx) => {
+                                                  const fbGrams = Math.ceil(reqFlour * (fb.percentage / 100));
+                                                  return (
+                                                    <div key={fbIdx} className="flex justify-between items-center border-b border-amber-500/5 pb-1">
+                                                      <span className="font-medium text-slate-600 dark:text-slate-300">
+                                                        🌾 {fb.name} <span className="text-[9px] text-slate-400">({fb.percentage}%)</span>
+                                                      </span>
+                                                      <strong className="font-mono text-amber-600 dark:text-amber-400">{fbGrams} g</strong>
+                                                    </div>
+                                                  );
+                                                })}
+                                              </div>
+                                            </div>
+                                          </div>
+                                          
+                                          {extraSeedInJar >= 0 ? (
+                                            <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium pt-2 border-t dark:border-slate-800">
+                                              ✨ Perfect! Discard/store the remaining <strong>{extraSeedInJar} g</strong> of seed, feed exactly <strong>{reqSeed} g</strong>, and you will have exactly <strong>{starterReserve}g</strong> remaining after baking!
+                                            </div>
+                                          ) : (
+                                            <div className="text-[10px] text-rose-500 dark:text-rose-400 font-medium pt-2 border-t dark:border-slate-800 bg-rose-500/5 p-2 rounded-lg leading-relaxed">
+                                              ⚠️ Seed Deficit: You need {Math.abs(extraSeedInJar)}g more seed to feed at {seedPart}:{flourPart}:{waterPart}. Build up your starter first or use Method B.
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })()
+                                  )}
+                                </div>
+                              </div>
+                            );
                           }
                         })}
                       </div>
