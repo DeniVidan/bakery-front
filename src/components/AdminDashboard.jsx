@@ -2476,11 +2476,97 @@ export default function AdminDashboard() {
                             </span>
                           ) : null;
                         })()}
+                      </div>
+                    </div> {/* Close Flour, Water, Starter, Salt boxes grid */}
+
+                    {/* Flour Types Breakdown & Materials Needed card */}
+                    {calculations.summary.floursBreakdown && calculations.summary.floursBreakdown.length > 0 && (
+                      <div className="glass-panel p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white/40 dark:bg-slate-900/40 space-y-4 animate-rise">
+                        <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
+                          <span className="text-xs uppercase font-extrabold tracking-widest text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                            🌾 {t('flourTypesBreakdown', { defaultValue: 'Flour Types Breakdown' })}
+                          </span>
+                          <span className="text-[10px] font-bold text-slate-400">
+                            {t('totalFlour', { defaultValue: 'Total Flour' })}: <strong className="font-mono text-slate-700 dark:text-slate-200">{(calculations.summary.totalFlourGrams / 1000).toFixed(2)} kg</strong>
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                          {calculations.summary.floursBreakdown.map((fb, idx) => {
+                            const shortItem = getBatchShortages().find(s => s.name === fb.name);
+                            return (
+                              <div 
+                                key={idx} 
+                                className={`flex flex-col justify-between text-xs p-3.5 rounded-xl bg-white/80 dark:bg-slate-950/60 border shadow-sm transition-all duration-200 hover:scale-[1.01] ${
+                                  shortItem 
+                                    ? 'border-amber-400/40 dark:border-amber-500/25 bg-amber-500/[0.02]' 
+                                    : 'border-slate-200/50 dark:border-slate-800/50'
+                                }`}
+                              >
+                                <div className="flex justify-between items-center w-full">
+                                  <span className="font-bold text-slate-800 dark:text-slate-200">{fb.name}</span>
+                                  <span className="font-black text-amber-600 dark:text-amber-400 font-mono text-sm">
+                                    {fb.grams >= 1000 ? `${(fb.grams / 1000).toFixed(2)} kg` : `${Math.round(fb.grams)} g`}
+                                  </span>
+                                </div>
+                                {shortItem && (
+                                  <div className="text-[9px] text-amber-600 dark:text-amber-400 font-black mt-2 pt-1.5 border-t border-amber-500/10 flex items-center gap-1">
+                                    <span>⚠️ Short: {shortItem.shortKg.toFixed(2)} kg</span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Extras & Fillings breakdown */}
+                    {calculations.summary.extras && calculations.summary.extras.length > 0 && (
+                      <div className="glass-panel p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white/40 dark:bg-slate-900/40 space-y-4 animate-rise">
+                        <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
+                          <span className="text-xs uppercase font-extrabold tracking-widest text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                            🧪 {t('richEnrichment', { defaultValue: 'Extras & Enrichments' })}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                          {calculations.summary.extras.map((extra, idx) => {
+                            const shortExtra = getBatchShortages().find(s => s.name === extra.name);
+                            return (
+                              <div 
+                                key={idx} 
+                                className={`flex flex-col justify-between text-xs p-3.5 rounded-xl bg-white/80 dark:bg-slate-950/60 border shadow-sm transition-all duration-200 hover:scale-[1.01] ${
+                                  shortExtra 
+                                    ? 'border-amber-400/40 dark:border-amber-500/25 bg-amber-500/[0.02]' 
+                                    : 'border-slate-200/50 dark:border-slate-800/50'
+                                }`}
+                              >
+                                <div className="flex justify-between items-center w-full">
+                                  <span className="font-bold text-slate-800 dark:text-slate-200">{extra.name}</span>
+                                  <span className="font-black text-bakery-600 dark:text-bakery-400 font-mono text-sm">
+                                    {extra.grams >= 1000 ? `${(extra.grams / 1000).toFixed(2)} kg` : `${extra.grams} g`}
+                                  </span>
+                                </div>
+                                {shortExtra && (
+                                  <div className="text-[9px] text-amber-600 dark:text-amber-400 font-black mt-2 pt-1.5 border-t border-amber-500/10 flex items-center gap-1">
+                                    <span>⚠️ Short: {shortExtra.shortKg.toFixed(2)} kg</span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Cumulative Dough Weight */}
+                    <div className="flex items-center justify-between text-xs p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white/40 dark:bg-slate-900/20 shadow-sm animate-rise">
+                      <span className="font-bold text-slate-500">{t('estCumulativeDough', { defaultValue: 'Estimated Cumulative Dough Weight' })}</span>
+                      <span className="font-black text-bakery-600 dark:text-bakery-400 text-sm">{(calculations.summary.totalDoughWeightGrams / 1000).toFixed(3)} kg</span>
                     </div>
 
                     {/* Warning about missing recipes */}
                     {calculations.missingRecipes.length > 0 && (
-                      <div className="p-3.5 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800/40 rounded-xl flex items-start gap-2 text-xs text-yellow-800 dark:text-yellow-400">
+                      <div className="p-3.5 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800/40 rounded-xl flex items-start gap-2 text-xs text-yellow-800 dark:text-yellow-400 animate-rise">
                         <AlertCircle size={16} className="shrink-0 mt-0.5" />
                         <div>
                           <span className="font-bold">{t('missingFormulas')}</span>
@@ -2490,10 +2576,6 @@ export default function AdminDashboard() {
                         </div>
                       </div>
                     )}
-
-                      <span className="font-bold text-slate-500">{t('estCumulativeDough')}</span>
-                      <span className="font-black text-bakery-600 dark:text-bakery-400 text-sm">{(calculations.summary.totalDoughWeightGrams / 1000).toFixed(3)} kg</span>
-                    </div>
 
                     {/* Sourdough Starter Feeding Assistant Card */}
                     {calculations.summary.startersBreakdown && calculations.summary.startersBreakdown.length > 0 && (
