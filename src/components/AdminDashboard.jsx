@@ -180,6 +180,7 @@ export default function AdminDashboard() {
   const [tempPantryStock, setTempPantryStock] = useState({});
   const [tempIngredientCosts, setTempIngredientCosts] = useState({});
   const [showMarginBreakdown, setShowMarginBreakdown] = useState(false);
+  const [showOverviewFinancials, setShowOverviewFinancials] = useState(false);
   const [copiedShoppingList, setCopiedShoppingList] = useState(false);
 
 
@@ -2325,84 +2326,106 @@ export default function AdminDashboard() {
                  {calculations ? (
                   <div className="space-y-6">
                     {/* Baker's Financial Margin & Costing Panel */}
-                    <div className="glass-panel rounded-3xl p-5 border border-slate-200 dark:border-slate-800 bg-white/50 dark:bg-slate-900/50 shadow-lg space-y-4">
+                    <div className="glass-panel rounded-2xl p-4 border border-slate-200 dark:border-slate-800 bg-white/50 dark:bg-slate-900/50 shadow-sm space-y-3">
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <div className="flex items-center gap-2">
-                          <span className="text-xl">💰</span>
+                          <span className="text-base">💰</span>
                           <div>
                             <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-100">
-                              {t('financialPerformanceTitle', { defaultValue: "Baker's Financial Performance Panel" })}
+                              {t('financialPerformanceTitle', { defaultValue: "Baker's Financial Performance" })}
                             </h4>
-                            <p className="text-[10px] text-slate-400 mt-0.5">
-                              {t('financialPerformanceDesc', { defaultValue: "Projected batch profitability, dynamic margin calculations, and ingredient unit costing." })}
-                            </p>
+                            {!showOverviewFinancials && (
+                              <p className="text-[9px] text-slate-400 mt-0.5 font-medium">
+                                € {calculateBatchRevenue().toFixed(2)} {t('grossSales', { defaultValue: 'Gross Sales' })} | {t('projectedProfit', { defaultValue: 'Projected Net Profit' })}: <strong className="text-emerald-600 dark:text-emerald-400 font-bold">€ {(calculateBatchRevenue() - calculateBatchCost()).toFixed(2)}</strong>
+                              </p>
+                            )}
+                            {showOverviewFinancials && (
+                              <p className="text-[10px] text-slate-400 mt-0.5">
+                                {t('financialPerformanceDesc', { defaultValue: "Projected batch profitability, dynamic margin calculations, and ingredient unit costing." })}
+                              </p>
+                            )}
                           </div>
                         </div>
 
-                        {/* Net Margin pill */}
-                        {(() => {
-                          const revenue = calculateBatchRevenue();
-                          const cost = calculateBatchCost();
-                          const profit = revenue - cost;
-                          const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
-                          return (
-                            <div className="px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] font-black flex items-center gap-1.5 animate-pulse">
-                              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
-                              {margin.toFixed(1)}% {t('marginBadge', { defaultValue: 'Margin' })}
-                            </div>
-                          );
-                        })()}
-                      </div>
-
-                      {/* Financial values grid */}
-                      <div className="grid grid-cols-3 gap-3">
-                        <div className="p-3 rounded-2xl bg-white dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800/60 text-center">
-                          <span className="text-[9px] uppercase font-extrabold tracking-wider text-slate-400 block">{t('grossSales', { defaultValue: 'Gross Sales' })}</span>
-                          <span className="text-sm font-black text-slate-800 dark:text-slate-100 mt-1 block">
-                            € {calculateBatchRevenue().toFixed(2)}
-                          </span>
-                        </div>
-                        <div className="p-3 rounded-2xl bg-white dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800/60 text-center">
-                          <span className="text-[9px] uppercase font-extrabold tracking-wider text-slate-400 block">{t('ingredientCost', { defaultValue: 'Ingredient Cost' })}</span>
-                          <span className="text-sm font-black text-slate-800 dark:text-slate-100 mt-1 block text-rose-500">
-                            - € {calculateBatchCost().toFixed(2)}
-                          </span>
-                        </div>
-                        <div className="p-3 rounded-2xl bg-white dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800/60 text-center">
-                          <span className="text-[9px] uppercase font-extrabold tracking-wider text-slate-400 block">{t('projectedProfit', { defaultValue: 'Projected Net Profit' })}</span>
-                          <span className="text-sm font-black text-emerald-600 dark:text-emerald-400 mt-1 block">
-                            € {(calculateBatchRevenue() - calculateBatchCost()).toFixed(2)}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Expandable Accordion for Cost Breakdown */}
-                      <div className="pt-2 border-t border-slate-100 dark:border-slate-850">
-                        <button
-                          type="button"
-                          onClick={() => setShowMarginBreakdown(!showMarginBreakdown)}
-                          className="w-full flex items-center justify-between text-xs font-bold text-slate-500 hover:text-bakery-600 transition"
-                        >
-                          <span>📋 {t('costBreakdownDetails', { defaultValue: 'Ingredient Cost Breakdown' })}</span>
-                          <span>{showMarginBreakdown ? '▲' : '▼'}</span>
-                        </button>
-
-                        {showMarginBreakdown && (
-                          <div className="mt-3 space-y-2 bg-slate-950/10 dark:bg-slate-950/40 p-3.5 rounded-2xl border border-slate-200/50 dark:border-slate-800/50 max-h-48 overflow-y-auto">
-                            {getBatchCostItems().map((item, idx) => (
-                              <div key={idx} className="flex justify-between items-center text-xs pb-1.5 border-b border-slate-100 dark:border-slate-850 last:border-0 last:pb-0">
-                                <div className="flex flex-col">
-                                  <span className="font-semibold text-slate-700 dark:text-slate-300">{item.name}</span>
-                                  <span className="text-[9px] text-slate-400 font-mono">{(item.weightGrams >= 1000 ? `${item.weightKg.toFixed(2)} kg` : `${Math.round(item.weightGrams)} g`)} @ € {item.unitCost.toFixed(2)}/kg</span>
-                                </div>
-                                <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
-                                  € {item.totalCost.toFixed(2)}
-                                </span>
+                        <div className="flex items-center gap-2">
+                          {/* Net Margin pill */}
+                          {(() => {
+                            const revenue = calculateBatchRevenue();
+                            const cost = calculateBatchCost();
+                            const profit = revenue - cost;
+                            const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
+                            return (
+                              <div className="px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[9px] font-black flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
+                                {margin.toFixed(1)}% {t('marginBadge', { defaultValue: 'Margin' })}
                               </div>
-                            ))}
-                          </div>
-                        )}
+                            );
+                          })()}
+
+                          {/* Toggle expand button */}
+                          <button
+                            type="button"
+                            onClick={() => setShowOverviewFinancials(!showOverviewFinancials)}
+                            className="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700/60 text-[9px] font-extrabold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition"
+                          >
+                            {showOverviewFinancials ? t('hideDetails', { defaultValue: 'Hide details' }) : t('showDetails', { defaultValue: 'Show details' })}
+                          </button>
+                        </div>
                       </div>
+
+                      {showOverviewFinancials && (
+                        <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-850 animate-rise">
+                          {/* Financial values grid */}
+                          <div className="grid grid-cols-3 gap-3">
+                            <div className="p-3 rounded-2xl bg-white dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800/60 text-center">
+                              <span className="text-[9px] uppercase font-extrabold tracking-wider text-slate-400 block">{t('grossSales', { defaultValue: 'Gross Sales' })}</span>
+                              <span className="text-sm font-black text-slate-800 dark:text-slate-100 mt-1 block">
+                                € {calculateBatchRevenue().toFixed(2)}
+                              </span>
+                            </div>
+                            <div className="p-3 rounded-2xl bg-white dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800/60 text-center">
+                              <span className="text-[9px] uppercase font-extrabold tracking-wider text-slate-400 block">{t('ingredientCost', { defaultValue: 'Ingredient Cost' })}</span>
+                              <span className="text-sm font-black text-slate-800 dark:text-slate-100 mt-1 block text-rose-500">
+                                - € {calculateBatchCost().toFixed(2)}
+                              </span>
+                            </div>
+                            <div className="p-3 rounded-2xl bg-white dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800/60 text-center">
+                              <span className="text-[9px] uppercase font-extrabold tracking-wider text-slate-400 block">{t('projectedProfit', { defaultValue: 'Projected Net Profit' })}</span>
+                              <span className="text-sm font-black text-emerald-600 dark:text-emerald-400 mt-1 block">
+                                € {(calculateBatchRevenue() - calculateBatchCost()).toFixed(2)}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Expandable Accordion for Cost Breakdown */}
+                          <div className="pt-2 border-t border-slate-150 dark:border-slate-800/40">
+                            <button
+                              type="button"
+                              onClick={() => setShowMarginBreakdown(!showMarginBreakdown)}
+                              className="w-full flex items-center justify-between text-xs font-bold text-slate-500 hover:text-bakery-600 transition"
+                            >
+                              <span>📋 {t('costBreakdownDetails', { defaultValue: 'Ingredient Cost Breakdown' })}</span>
+                              <span>{showMarginBreakdown ? '▲' : '▼'}</span>
+                            </button>
+
+                            {showMarginBreakdown && (
+                              <div className="mt-2.5 space-y-2 bg-slate-950/10 dark:bg-slate-950/40 p-3 rounded-xl border border-slate-200/50 dark:border-slate-800/50 max-h-48 overflow-y-auto">
+                                {getBatchCostItems().map((item, idx) => (
+                                  <div key={idx} className="flex justify-between items-center text-xs pb-1.5 border-b border-slate-100 dark:border-slate-850 last:border-0 last:pb-0">
+                                    <div className="flex flex-col">
+                                      <span className="font-semibold text-slate-700 dark:text-slate-300">{item.name}</span>
+                                      <span className="text-[9px] text-slate-400 font-mono">{(item.weightGrams >= 1000 ? `${item.weightKg.toFixed(2)} kg` : `${Math.round(item.weightGrams)} g`)} @ € {item.unitCost.toFixed(2)}/kg</span>
+                                    </div>
+                                    <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                                      € {item.totalCost.toFixed(2)}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Flour, water, starter, salt boxes */}
@@ -2453,7 +2476,23 @@ export default function AdminDashboard() {
                             </span>
                           ) : null;
                         })()}
+                    </div>
+
+                    {/* Warning about missing recipes */}
+                    {calculations.missingRecipes.length > 0 && (
+                      <div className="p-3.5 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800/40 rounded-xl flex items-start gap-2 text-xs text-yellow-800 dark:text-yellow-400">
+                        <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                        <div>
+                          <span className="font-bold">{t('missingFormulas')}</span>
+                          <p className="text-[10px] mt-0.5 leading-relaxed">
+                            {t('missingFormulasDesc', { recipes: calculations.missingRecipes.join(', ') })}
+                          </p>
+                        </div>
                       </div>
+                    )}
+
+                      <span className="font-bold text-slate-500">{t('estCumulativeDough')}</span>
+                      <span className="font-black text-bakery-600 dark:text-bakery-400 text-sm">{(calculations.summary.totalDoughWeightGrams / 1000).toFixed(3)} kg</span>
                     </div>
 
                     {/* Sourdough Starter Feeding Assistant Card */}
@@ -2598,12 +2637,12 @@ export default function AdminDashboard() {
                                       const totalTarget = target + starterReserve;
                                       if (availableStarterSeed >= totalTarget) {
                                         return (
-                                          <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800/80 bg-white/40 dark:bg-slate-900/40 flex flex-col items-center justify-center text-center space-y-1 animate-rise">
-                                            <span className="text-xs text-slate-400">
-                                              You already have enough starter seed ({availableStarterSeed}g) to meet the total required weight ({totalTarget}g) including reserve!
+                                          <div className="p-4 rounded-2xl border border-emerald-500/10 bg-emerald-500/[0.02] flex flex-col items-center justify-center text-center space-y-1 animate-rise">
+                                            <span className="text-xs text-emerald-600 dark:text-emerald-400 font-black uppercase tracking-wider">
+                                              ✨ Sufficient Starter: No feeding required
                                             </span>
-                                            <span className="text-xs text-emerald-600 font-semibold mt-1">
-                                              No scale-up feeding is needed. After using {target}g for baking, you will have {availableStarterSeed - target}g left.
+                                            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                                              Post-bake reserve: <strong className="text-slate-700 dark:text-slate-200 font-mono">{availableStarterSeed - target} g</strong> (Total seed: {availableStarterSeed}g / Target: {totalTarget}g)
                                             </span>
                                           </div>
                                         );
@@ -2646,8 +2685,9 @@ export default function AdminDashboard() {
                                               <strong className="font-mono text-slate-800 dark:text-slate-100">{feedWater} g</strong>
                                             </div>
                                           </div>
-                                          <div className="text-[10px] text-amber-600 dark:text-amber-400 font-medium pt-2 border-t border-amber-500/10 leading-relaxed">
-                                            🚀 This feeds your seed to a total of <strong>{availableStarterSeed + feedFlour + feedWater}g</strong> (Ratio <strong>1 : {ratioMultiplier} : {ratioMultiplier}</strong>). After baking with <strong>{target}g</strong>, exactly <strong>{availableStarterSeed + feedFlour + feedWater - target}g</strong> of starter remains in your jar!
+                                          <div className="text-[10px] text-amber-600 dark:text-amber-400 font-extrabold pt-2 border-t border-amber-500/10 flex justify-between items-center">
+                                            <span>✨ Feeding Ratio: 1 : {ratioMultiplier} : {ratioMultiplier}</span>
+                                            <span>Final Jar Reserve: <strong className="font-mono">{availableStarterSeed + feedFlour + feedWater - target} g</strong></span>
                                           </div>
                                         </div>
                                       );
@@ -2701,12 +2741,13 @@ export default function AdminDashboard() {
                                           </div>
                                           
                                           {extraSeedInJar >= 0 ? (
-                                            <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium pt-2 border-t dark:border-slate-800">
-                                              ✨ Perfect! Discard/store the remaining <strong>{extraSeedInJar} g</strong> of seed, feed exactly <strong>{reqSeed} g</strong>, and you will have exactly <strong>{starterReserve}g</strong> remaining after baking!
+                                            <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-extrabold pt-2 border-t dark:border-slate-800 flex justify-between items-center">
+                                              <span>✨ Seed to discard/store: <strong className="font-mono">{extraSeedInJar} g</strong></span>
+                                              <span>Post-bake reserve: <strong className="font-mono">{starterReserve} g</strong></span>
                                             </div>
                                           ) : (
-                                            <div className="text-[10px] text-rose-500 dark:text-rose-400 font-medium pt-2 border-t dark:border-slate-800 bg-rose-500/5 p-2 rounded-lg leading-relaxed">
-                                              ⚠️ Seed Deficit: You need {Math.abs(extraSeedInJar)}g more seed to feed at {starterPresetRatio}. Build up your starter first or use Method B.
+                                            <div className="text-[10px] text-rose-500 dark:text-rose-400 font-extrabold pt-2 border-t dark:border-slate-800 flex justify-between items-center">
+                                              <span>⚠️ Seed Deficit: <strong className="font-mono">{Math.abs(extraSeedInJar)} g</strong> needed for {starterPresetRatio} ratio.</span>
                                             </div>
                                           )}
                                         </div>
@@ -2826,12 +2867,12 @@ export default function AdminDashboard() {
                                     (() => {
                                       if (availableStarterSeed >= totalTarget) {
                                         return (
-                                          <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800/80 bg-white/40 dark:bg-slate-900/40 flex flex-col items-center justify-center text-center space-y-1">
-                                            <span className="text-xs text-slate-400">
-                                              You already have enough starter seed ({availableStarterSeed}g) to meet the total required weight ({totalTarget}g) including reserve!
+                                          <div className="p-4 rounded-2xl border border-emerald-500/10 bg-emerald-500/[0.02] flex flex-col items-center justify-center text-center space-y-1 animate-rise">
+                                            <span className="text-xs text-emerald-600 dark:text-emerald-400 font-black uppercase tracking-wider">
+                                              ✨ Sufficient Starter: No feeding required
                                             </span>
-                                            <span className="text-xs text-emerald-600 font-semibold mt-1">
-                                              No scale-up feeding is needed. After using {target}g for baking, you will have {availableStarterSeed - target}g left.
+                                            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                                              Post-bake reserve: <strong className="text-slate-700 dark:text-slate-200 font-mono">{availableStarterSeed - target} g</strong> (Total seed: {availableStarterSeed}g / Target: {totalTarget}g)
                                             </span>
                                           </div>
                                         );
@@ -2886,8 +2927,9 @@ export default function AdminDashboard() {
                                               </div>
                                             </div>
                                           </div>
-                                          <div className="text-[10px] text-amber-600 dark:text-amber-400 font-medium pt-2 border-t border-amber-500/10 leading-relaxed">
-                                            🚀 This feeds your seed to a total of <strong>{availableStarterSeed + feedFlour + feedWater}g</strong> (Ratio <strong>1 : {ratioMultiplierFlour} : {ratioMultiplierWater}</strong>). After baking with <strong>{target}g</strong>, exactly <strong>{availableStarterSeed + feedFlour + feedWater - target}g</strong> of starter remains in your jar!
+                                          <div className="text-[10px] text-amber-600 dark:text-amber-400 font-extrabold pt-2 border-t border-amber-500/10 flex justify-between items-center">
+                                            <span>✨ Feeding Ratio: 1 : {ratioMultiplierFlour} : {ratioMultiplierWater}</span>
+                                            <span>Final Jar Reserve: <strong className="font-mono">{availableStarterSeed + feedFlour + feedWater - target} g</strong></span>
                                           </div>
                                         </div>
                                       );
@@ -2944,12 +2986,13 @@ export default function AdminDashboard() {
                                           </div>
                                           
                                           {extraSeedInJar >= 0 ? (
-                                            <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium pt-2 border-t dark:border-slate-800">
-                                              ✨ Perfect! Discard/store the remaining <strong>{extraSeedInJar} g</strong> of seed, feed exactly <strong>{reqSeed} g</strong>, and you will have exactly <strong>{starterReserve}g</strong> remaining after baking!
+                                            <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-extrabold pt-2 border-t dark:border-slate-800 flex justify-between items-center">
+                                              <span>✨ Seed to discard/store: <strong className="font-mono">{extraSeedInJar} g</strong></span>
+                                              <span>Post-bake reserve: <strong className="font-mono">{starterReserve} g</strong></span>
                                             </div>
                                           ) : (
-                                            <div className="text-[10px] text-rose-500 dark:text-rose-400 font-medium pt-2 border-t dark:border-slate-800 bg-rose-500/5 p-2 rounded-lg leading-relaxed">
-                                              ⚠️ Seed Deficit: You need {Math.abs(extraSeedInJar)}g more seed to feed at {seedPart}:{flourPart}:{waterPart}. Build up your starter first or use Method B.
+                                            <div className="text-[10px] text-rose-500 dark:text-rose-400 font-extrabold pt-2 border-t dark:border-slate-800 flex justify-between items-center">
+                                              <span>⚠️ Seed Deficit: <strong className="font-mono">{Math.abs(extraSeedInJar)} g</strong> needed for {seedPart}:{flourPart}:{waterPart} ratio.</span>
                                             </div>
                                           )}
                                         </div>
@@ -2963,91 +3006,6 @@ export default function AdminDashboard() {
                         })}
                       </div>
                     )}
-
-                    {/* Flour types breakdown */}
-                    {calculations.summary.floursBreakdown && calculations.summary.floursBreakdown.length > 0 && (
-                      <div className="bg-amber-500/5 dark:bg-amber-950/10 p-4 rounded-xl border border-amber-500/20">
-                        <span className="text-[10px] uppercase font-bold tracking-widest text-amber-600 dark:text-amber-400 block mb-2">🌾 {t('flourTypesBreakdown')}</span>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          {calculations.summary.floursBreakdown.map((fb, idx) => {
-                            const shortItem = getBatchShortages().find(s => s.name === fb.name);
-                            return (
-                              <div 
-                                key={idx} 
-                                className={`flex flex-col justify-between text-xs p-3 rounded-xl bg-white dark:bg-slate-900 border shadow-sm animate-rise transition ${
-                                  shortItem 
-                                    ? 'border-amber-400/50 dark:border-amber-500/30 bg-amber-500/[0.02]' 
-                                    : 'border-slate-100 dark:border-slate-800/40'
-                                }`}
-                              >
-                                <div className="flex justify-between items-center w-full">
-                                  <span className="font-semibold text-slate-700 dark:text-slate-300">{fb.name}</span>
-                                  <span className="font-extrabold text-amber-600 dark:text-amber-400">
-                                    {fb.grams >= 1000 ? `${(fb.grams / 1000).toFixed(2)} kg` : `${Math.round(fb.grams)} g`}
-                                  </span>
-                                </div>
-                                {shortItem && (
-                                  <div className="text-[9px] text-amber-600 dark:text-amber-400 font-extrabold mt-1 pt-1 border-t border-amber-500/10 flex items-center gap-1">
-                                    <span>⚠️ {t('shortBy', { defaultValue: 'Short by' })} {shortItem.shortKg.toFixed(2)} kg</span>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                    {calculations.summary.extras.length > 0 && (
-                      <div className="bg-slate-50 dark:bg-slate-900/40 p-4 rounded-xl border border-slate-200/40 dark:border-slate-800/40">
-                        <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400 block mb-2">{t('richEnrichment')}</span>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          {calculations.summary.extras.map((extra, idx) => {
-                            const shortExtra = getBatchShortages().find(s => s.name === extra.name);
-                            return (
-                              <div 
-                                key={idx} 
-                                className={`flex flex-col justify-between text-xs p-3 rounded-xl bg-white dark:bg-slate-900 border transition ${
-                                  shortExtra 
-                                    ? 'border-amber-400/50 dark:border-amber-500/30 bg-amber-500/[0.02]' 
-                                    : 'border-slate-100 dark:border-slate-800/40'
-                                }`}
-                              >
-                                <div className="flex justify-between items-center w-full">
-                                  <span className="font-semibold text-slate-700 dark:text-slate-300">{extra.name}</span>
-                                  <span className="font-extrabold text-bakery-600 dark:text-bakery-400">
-                                    {extra.grams >= 1000 ? `${(extra.grams / 1000).toFixed(2)} kg` : `${extra.grams} g`}
-                                  </span>
-                                </div>
-                                {shortExtra && (
-                                  <div className="text-[9px] text-amber-600 dark:text-amber-400 font-extrabold mt-1 pt-1 border-t border-amber-500/10 flex items-center gap-1">
-                                    <span>⚠️ {t('shortBy', { defaultValue: 'Short by' })} {shortExtra.shortKg.toFixed(2)} kg</span>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Warning about missing recipes */}
-                    {calculations.missingRecipes.length > 0 && (
-                      <div className="p-3.5 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800/40 rounded-xl flex items-start gap-2 text-xs text-yellow-800 dark:text-yellow-400">
-                        <AlertCircle size={16} className="shrink-0 mt-0.5" />
-                        <div>
-                          <span className="font-bold">{t('missingFormulas')}</span>
-                          <p className="text-[10px] mt-0.5 leading-relaxed">
-                            {t('missingFormulasDesc', { recipes: calculations.missingRecipes.join(', ') })}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Cumulative Dough Weight */}
-                    <div className="flex items-center justify-between text-xs p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white/40 dark:bg-slate-900/20">
-                      <span className="font-bold text-slate-500">{t('estCumulativeDough')}</span>
-                      <span className="font-black text-bakery-600 dark:text-bakery-400 text-sm">{(calculations.summary.totalDoughWeightGrams / 1000).toFixed(3)} kg</span>
-                    </div>
 
                     {/* Automated Grocery Shopping List Sheet */}
                     {(() => {
