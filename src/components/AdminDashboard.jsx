@@ -19,6 +19,7 @@ import {
   Unlock, 
   LogOut,
   ChevronRight,
+  ChevronDown,
   Sparkles,
   Layers,
   AlertCircle,
@@ -27,11 +28,13 @@ import {
   Award,
   MessageSquare,
   DollarSign,
-  Download
+  Download,
+  Package,
+  Pencil
 } from 'lucide-react';
 
 
-const generateUpcomingDates = (bakingDays = ['Tuesday', 'Saturday'], count = 6) => {
+const generateUpcomingDates = (bakingDays = ['Tuesday', 'Saturday'], count = 6, seasons = []) => {
   const result = [];
   const daysMap = {
     'Sunday': 0,
@@ -43,16 +46,30 @@ const generateUpcomingDates = (bakingDays = ['Tuesday', 'Saturday'], count = 6) 
     'Saturday': 6
   };
   
-  const targetDays = bakingDays.map(d => daysMap[d]).filter(d => d !== undefined);
-  if (targetDays.length === 0) {
-    targetDays.push(2, 6); // default Tuesday and Saturday
-  }
-
   let current = new Date();
   current.setHours(12, 0, 0, 0);
 
-  while (result.length < count) {
+  for (let i = 0; i < 90 && result.length < count; i++) {
+    // Format date as YYYY-MM-DD
+    const yearStr = current.getFullYear();
+    const monthStr = String(current.getMonth() + 1).padStart(2, '0');
+    const dateStr = String(current.getDate()).padStart(2, '0');
+    const isoDateStr = `${yearStr}-${monthStr}-${dateStr}`;
+
+    // Find if there is an active season covering this date
+    let activeSeason = null;
+    if (seasons && seasons.length > 0) {
+      activeSeason = seasons.find(s => s.startDate <= isoDateStr && isoDateStr <= s.endDate);
+    }
+
+    let activeBakingDays = bakingDays;
+    if (activeSeason) {
+      activeBakingDays = activeSeason.bakingDays || [];
+    }
+
+    const targetDays = activeBakingDays.map(d => daysMap[d]).filter(d => d !== undefined);
     const dayOfWeek = current.getDay();
+
     if (targetDays.includes(dayOfWeek)) {
       result.push(new Date(current));
     }
@@ -128,6 +145,19 @@ export default function AdminDashboard() {
   
   // Settings & Rescheduling States
   const [bakingDays, setBakingDays] = useState(['Tuesday', 'Saturday']);
+  const [bakingSeasons, setBakingSeasons] = useState([]);
+  const [deductedBatches, setDeductedBatches] = useState([]);
+  const [showRosterForm, setShowRosterForm] = useState(false);
+  const [editingRosterId, setEditingRosterId] = useState(null);
+  const [scheduleMode, setScheduleMode] = useState('advanced'); // 'easy' or 'advanced'
+  const [showFallbackDefaults, setShowFallbackDefaults] = useState(false);
+  const [rosterName, setRosterName] = useState('');
+  const [rosterStartDate, setRosterStartDate] = useState('');
+  const [rosterEndDate, setRosterEndDate] = useState('');
+  const [rosterDays, setRosterDays] = useState([]);
+  const [rosterTime, setRosterTime] = useState('06:00');
+  const [rosterCutoff, setRosterCutoff] = useState(72);
+  const [updatingOrderIds, setUpdatingOrderIds] = useState([]);
   const [upcomingDates, setUpcomingDates] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [rescheduleOrder, setRescheduleOrder] = useState(null);
@@ -156,6 +186,18 @@ export default function AdminDashboard() {
   const [tempStarterFlours, setTempStarterFlours] = useState([]); // [{ name: 'Bread Flour', percentage: 100 }]
   const [tempFeedingMethod, setTempFeedingMethod] = useState('method-a');
   const [starterOverrides, setStarterOverrides] = useState({});
+
+  // Forecasting States (Option 5)
+  const [forecastDays, setForecastDays] = useState(14);
+  const [forecastData, setForecastData] = useState(null);
+  const [loadingForecast, setLoadingForecast] = useState(false);
+
+  // Dispatch & Bagging States (Option 4)
+  const [selectedDispatchBatchId, setSelectedDispatchBatchId] = useState('');
+  const [selectedDispatchSlot, setSelectedDispatchSlot] = useState('all');
+  const [searchDispatchQuery, setSearchDispatchQuery] = useState('');
+  const [loadingDispatch, setLoadingDispatch] = useState(false);
+  const [ordersMetadata, setOrdersMetadata] = useState({});
 
   const [pantryStock, setPantryStock] = useState({
     "Manitoba": 10.0,
@@ -669,6 +711,21 @@ export default function AdminDashboard() {
     }
   };
 
+  useEffect(() => {
+    if (activeTab === 'finances') {
+      fetchForecast(forecastDays);
+    }
+  }, [activeTab, forecastDays]);
+
+  useEffect(() => {
+    if (activeTab === 'dispatch' && selectedDispatchBatchId) {
+      const batchOrders = orders.filter(o => o.batchId === selectedDispatchBatchId);
+      batchOrders.forEach(o => {
+        fetchOrderMetadata(o.id);
+      });
+    }
+  }, [activeTab, selectedDispatchBatchId, orders]);
+
   const fetchUsers = async () => {
     try {
       const res = await authFetch('/api/users');
@@ -757,10 +814,38 @@ export default function AdminDashboard() {
       if (res.ok) {
         const data = await res.json();
         if (data.settings) {
+          let mode = 'advanced';
+          if (data.settings.scheduleMode) {
+            mode = data.settings.scheduleMode;
+            setScheduleMode(mode);
+          } else {
+            setScheduleMode('advanced');
+          }
+
+          let activeSeasons = [];
+          if (data.settings.bakingSeasons) {
+            try {
+              activeSeasons = JSON.parse(data.settings.bakingSeasons);
+              setBakingSeasons(activeSeasons);
+            } catch (e) {
+              console.error('Error parsing bakingSeasons setting:', e);
+            }
+          }
+
+          const seasonsForCalc = mode === 'easy' ? [] : activeSeasons;
+
+          if (data.settings.deductedBatches) {
+            try {
+              setDeductedBatches(JSON.parse(data.settings.deductedBatches));
+            } catch (e) {
+              console.error('Error parsing deductedBatches setting:', e);
+            }
+          }
+
           if (data.settings.bakingDays) {
             const parsed = JSON.parse(data.settings.bakingDays);
             setBakingDays(parsed);
-            const dates = generateUpcomingDates(parsed);
+            const dates = generateUpcomingDates(parsed, 6, seasonsForCalc);
             setUpcomingDates(dates);
             if (dates.length > 0 && !internalOrderSlot) {
               setInternalOrderSlot(dates[0].toISOString().split('T')[0]);
@@ -768,7 +853,7 @@ export default function AdminDashboard() {
           } else {
             const defaultDays = ['Tuesday', 'Saturday'];
             setBakingDays(defaultDays);
-            const dates = generateUpcomingDates(defaultDays);
+            const dates = generateUpcomingDates(defaultDays, 6, seasonsForCalc);
             setUpcomingDates(dates);
             if (dates.length > 0 && !internalOrderSlot) {
               setInternalOrderSlot(dates[0].toISOString().split('T')[0]);
@@ -937,6 +1022,77 @@ export default function AdminDashboard() {
         setErrorMessage(data.error || t('redeemLoafError', { defaultValue: 'Cannot redeem free loaf.' }));
       }
     } catch (err) {
+      setErrorMessage('Could not connect to loyalty server.');
+    }
+  };
+
+  const fetchForecast = async (days) => {
+    try {
+      setLoadingForecast(true);
+      const res = await authFetch(`/api/production/forecast?days=${days}`);
+      if (res.ok) {
+        const data = await res.json();
+        setForecastData(data);
+      }
+    } catch (err) {
+      console.error('Error fetching recipe forecast:', err);
+    } finally {
+      setLoadingForecast(false);
+    }
+  };
+
+  const fetchOrderMetadata = async (orderId) => {
+    try {
+      const res = await authFetch(`/api/orders/${orderId}/metadata`);
+      if (res.ok) {
+        const data = await res.json();
+        setOrdersMetadata(prev => ({
+          ...prev,
+          [orderId]: data || { cubby: '', checkedItems: [] }
+        }));
+      }
+    } catch (err) {
+      console.error(`Error fetching metadata for order ${orderId}:`, err);
+    }
+  };
+
+  const saveOrderMetadata = async (orderId, meta) => {
+    try {
+      setOrdersMetadata(prev => ({
+        ...prev,
+        [orderId]: meta
+      }));
+      await authFetch(`/api/orders/${orderId}/metadata`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(meta)
+      });
+    } catch (err) {
+      console.error(`Error saving metadata for order ${orderId}:`, err);
+    }
+  };
+
+  const adjustManualStamps = async (userId, adjustment) => {
+    setStatusMsg('');
+    setErrorMessage('');
+    try {
+      const res = await authFetch('/api/loyalty/adjust-manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, adjustment })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setStatusMsg(t('loyaltyAdjustSuccess', { defaultValue: 'Loyalty stamps successfully updated!' }));
+        fetchLoyaltyList();
+        if (selectedLoyaltyUser && selectedLoyaltyUser.id === userId) {
+          fetchLoyaltyHistory(userId);
+        }
+      } else {
+        setErrorMessage(data.error || 'Failed to adjust stamps.');
+      }
+    } catch (err) {
+      console.error('Error adjusting manual stamps:', err);
       setErrorMessage('Could not connect to loyalty server.');
     }
   };
@@ -1156,7 +1312,7 @@ export default function AdminDashboard() {
       if (res.ok) {
         setStatusMsg(t('settingsSaved'));
         setBakingDays(selectedDays);
-        setUpcomingDates(generateUpcomingDates(selectedDays));
+        setUpcomingDates(generateUpcomingDates(selectedDays, 6, scheduleMode === 'easy' ? [] : bakingSeasons));
       } else {
         setErrorMessage(data.error || 'Failed to save settings');
       }
@@ -1166,6 +1322,128 @@ export default function AdminDashboard() {
       setSavingSettings(false);
     }
   };
+
+  const saveBakingSeasonsSetting = async (seasonsList) => {
+    setSavingSettings(true);
+    setStatusMsg('');
+    setErrorMessage('');
+    try {
+      const res = await authFetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key: 'bakingSeasons',
+          value: JSON.stringify(seasonsList)
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setStatusMsg(t('settingsSaved'));
+        setBakingSeasons(seasonsList);
+        setUpcomingDates(generateUpcomingDates(bakingDays, 6, scheduleMode === 'easy' ? [] : seasonsList));
+      } else {
+        setErrorMessage(data.error || 'Failed to save settings');
+      }
+    } catch (err) {
+      setErrorMessage('Could not connect to server.');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const saveScheduleModeSetting = async (mode) => {
+    setSavingSettings(true);
+    setStatusMsg('');
+    setErrorMessage('');
+    try {
+      const res = await authFetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key: 'scheduleMode',
+          value: mode
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setStatusMsg(t('settingsSaved'));
+        setScheduleMode(mode);
+        setUpcomingDates(generateUpcomingDates(bakingDays, 6, mode === 'easy' ? [] : bakingSeasons));
+      } else {
+        setErrorMessage(data.error || 'Failed to save settings');
+      }
+    } catch (err) {
+      setErrorMessage('Could not connect to server.');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const handleCreateRoster = async () => {
+    if (!rosterName.trim()) {
+      setErrorMessage(t('rosterNameRequired', { defaultValue: 'Please enter a roster name.' }));
+      return;
+    }
+    if (!rosterStartDate || !rosterEndDate) {
+      setErrorMessage(t('rosterDatesRequired', { defaultValue: 'Please select both start and end dates.' }));
+      return;
+    }
+    if (rosterStartDate > rosterEndDate) {
+      setErrorMessage(t('rosterStartDateAfterEnd', { defaultValue: 'Start date cannot be after end date.' }));
+      return;
+    }
+    if (rosterDays.length === 0) {
+      setErrorMessage(t('rosterDaysRequired', { defaultValue: 'Please select at least one baking day.' }));
+      return;
+    }
+
+    let updatedSeasons;
+    if (editingRosterId) {
+      updatedSeasons = bakingSeasons.map(s => {
+        if (s.id === editingRosterId) {
+          return {
+            ...s,
+            name: rosterName.trim(),
+            startDate: rosterStartDate,
+            endDate: rosterEndDate,
+            bakingDays: rosterDays,
+            bakeTime: rosterTime || '06:00',
+            cutoffHours: rosterCutoff !== "" ? parseInt(rosterCutoff, 10) : null
+          };
+        }
+        return s;
+      });
+    } else {
+      const newRoster = {
+        id: Date.now().toString(),
+        name: rosterName.trim(),
+        startDate: rosterStartDate,
+        endDate: rosterEndDate,
+        bakingDays: rosterDays,
+        bakeTime: rosterTime || '06:00',
+        cutoffHours: rosterCutoff !== "" ? parseInt(rosterCutoff, 10) : null
+      };
+      updatedSeasons = [...bakingSeasons, newRoster];
+    }
+
+    await saveBakingSeasonsSetting(updatedSeasons);
+
+    // Reset fields
+    setRosterName('');
+    setRosterStartDate('');
+    setRosterEndDate('');
+    setRosterDays([]);
+    setRosterTime('06:00');
+    setRosterCutoff(leadTimeHours);
+    setEditingRosterId(null);
+    setShowRosterForm(false);
+  };
+
+  const handleDeleteRoster = async (id) => {
+    const updatedSeasons = bakingSeasons.filter(s => s.id !== id);
+    await saveBakingSeasonsSetting(updatedSeasons);
+  };
+
 
   // User Actions: Approve, Reject, Role Update
   const handleUserStatus = async (userId, newStatus) => {
@@ -1204,6 +1482,7 @@ export default function AdminDashboard() {
 
   // Order Actions: Change status
   const handleOrderStatus = async (orderId, status) => {
+    setUpdatingOrderIds((prev) => [...prev, orderId, `${orderId}-${status}`]);
     try {
       const res = await authFetch(`/api/orders/${orderId}/status`, {
         method: 'PUT',
@@ -1212,9 +1491,17 @@ export default function AdminDashboard() {
       });
       if (res.ok) {
         setStatusMsg(`Order status updated to ${status}`);
-        fetchOrders();
+        await fetchOrders();
+        if (activeTab === 'batches') {
+          fetchBatches();
+          fetchCalculations('', selectedCalculationBatchId);
+        }
       }
-    } catch (err) {}
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setUpdatingOrderIds((prev) => prev.filter((id) => id !== orderId && id !== `${orderId}-${status}`));
+    }
   };
 
   // Remove single order from production batch (unbatch)
@@ -1281,6 +1568,42 @@ export default function AdminDashboard() {
       }
     }
 
+    const cleanedProduct = JSON.parse(JSON.stringify(newProduct));
+    cleanedProduct.variants = cleanedProduct.variants.map(v => {
+      const priceVal = (v.price === '' || isNaN(parseFloat(v.price))) ? 0.0 : parseFloat(v.price);
+      if (v.recipe) {
+        const flourVal = (v.recipe.flour === '' || isNaN(parseFloat(v.recipe.flour))) ? 0.0 : parseFloat(v.recipe.flour);
+        const waterVal = (v.recipe.water === '' || isNaN(parseFloat(v.recipe.water))) ? 0.0 : parseFloat(v.recipe.water);
+        const saltVal = (v.recipe.salt === '' || isNaN(parseFloat(v.recipe.salt))) ? 0.0 : parseFloat(v.recipe.salt);
+        const starterVal = (v.recipe.starter === '' || isNaN(parseFloat(v.recipe.starter))) ? 0.0 : parseFloat(v.recipe.starter);
+
+        const floursBreakdown = (v.recipe.floursBreakdown || []).map(fb => ({
+          ...fb,
+          percentage: (fb.percentage === '' || isNaN(parseFloat(fb.percentage))) ? 0 : parseFloat(fb.percentage)
+        }));
+
+        const extraIngredients = (v.recipe.extraIngredients || []).map(ext => ({
+          ...ext,
+          grams: (ext.grams === '' || isNaN(parseFloat(ext.grams))) ? 0.0 : parseFloat(ext.grams)
+        }));
+
+        return {
+          ...v,
+          price: priceVal,
+          recipe: {
+            ...v.recipe,
+            flour: flourVal,
+            water: waterVal,
+            salt: saltVal,
+            starter: starterVal,
+            floursBreakdown,
+            extraIngredients
+          }
+        };
+      }
+      return { ...v, price: priceVal };
+    });
+
     try {
       const method = editingProduct ? 'PUT' : 'POST';
       const endpoint = editingProduct ? `/api/products/${editingProduct.id}` : '/api/products';
@@ -1288,18 +1611,18 @@ export default function AdminDashboard() {
       const res = await authFetch(endpoint, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newProduct)
+        body: JSON.stringify(cleanedProduct)
       });
 
       if (res.ok) {
         // Fail-safe registration of any custom flours and extras in the saved product
         let updatedStock = { ...pantryStock };
         let stockChanged = false;
-
+ 
         let updatedFlours = [...enabledFlours];
         let floursChanged = false;
-
-        newProduct.variants.forEach(v => {
+ 
+        cleanedProduct.variants.forEach(v => {
           if (v.recipe) {
             if (v.recipe.floursBreakdown) {
               v.recipe.floursBreakdown.forEach(fb => {
@@ -1810,6 +2133,175 @@ export default function AdminDashboard() {
     }, 0);
   };
 
+  const getBatchIngredientsRequired = () => {
+    if (!calculations || !calculations.summary) return {};
+    const reqGrams = {};
+
+    // 1. Calculate additional flour requirements from starter feeding
+    const feedingFloursMap = {};
+    if (calculations.summary.startersBreakdown && calculations.summary.startersBreakdown.length > 0) {
+      calculations.summary.startersBreakdown.forEach((sb) => {
+        const target = Math.round(sb.grams);
+        if (target <= 0) return;
+
+        const activeStarterName = starterOverrides[sb.name] || sb.name;
+        const profile = starters.find(s => s.name === activeStarterName) || {
+          id: 'standard-starter',
+          name: activeStarterName || 'Standard Sourdough Starter',
+          seedParts: 1,
+          flourParts: 2,
+          waterParts: 2,
+          floursBreakdown: [{ name: 'Manitoba', percentage: 100 }]
+        };
+
+        const isStandard = activeStarterName === 'Standard Sourdough Starter';
+        const isMethodB = profile.feedingMethod === 'method-b';
+        const totalTarget = target + starterReserve;
+
+        let feedFlour = 0;
+
+        if (isMethodB) {
+          if (availableStarterSeed < totalTarget) {
+            const remainingWeight = totalTarget - availableStarterSeed;
+            const flourPart = profile.flourParts || 2;
+            const waterPart = profile.waterParts || 2;
+            const totalFeedParts = flourPart + waterPart;
+            feedFlour = Math.ceil(remainingWeight * (flourPart / totalFeedParts));
+          }
+        } else {
+          let seedPart = profile.seedParts || 1;
+          let flourPart = profile.flourParts || 2;
+          let waterPart = profile.waterParts || 2;
+
+          if (isStandard) {
+            const parts = starterPresetRatio.split(':').map(p => parseFloat(p));
+            seedPart = parts[0] || 1;
+            flourPart = parts[1] || 2;
+            waterPart = parts[2] || 2;
+          }
+
+          const sumParts = seedPart + flourPart + waterPart;
+          const reqSeed = Math.ceil(totalTarget / sumParts);
+          feedFlour = Math.ceil(reqSeed * flourPart);
+        }
+
+        if (feedFlour > 0) {
+          const floursBreakdown = profile.floursBreakdown || [{ name: 'Manitoba', percentage: 100 }];
+          floursBreakdown.forEach((fb) => {
+            const fbGrams = Math.ceil(feedFlour * (fb.percentage / 100));
+            feedingFloursMap[fb.name] = (feedingFloursMap[fb.name] || 0) + fbGrams;
+          });
+        }
+      });
+    }
+
+    // 2. Regular baking flours
+    const flours = calculations.summary.floursBreakdown || [];
+    if (flours.length > 0) {
+      flours.forEach(f => {
+        reqGrams[f.name] = (reqGrams[f.name] || 0) + f.grams;
+      });
+    } else if (calculations.summary.totalFlourGrams > 0) {
+      reqGrams['Bread Flour'] = (reqGrams['Bread Flour'] || 0) + calculations.summary.totalFlourGrams;
+    }
+
+    // Combine feeding flours
+    Object.entries(feedingFloursMap).forEach(([flourName, grams]) => {
+      reqGrams[flourName] = (reqGrams[flourName] || 0) + grams;
+    });
+
+    // 3. Salt
+    if (calculations.summary.totalSaltGrams > 0) {
+      reqGrams['Salt'] = (reqGrams['Salt'] || 0) + calculations.summary.totalSaltGrams;
+    }
+
+    // 4. Extras
+    const extras = calculations.summary.extras || [];
+    extras.forEach(ex => {
+      reqGrams[ex.name] = (reqGrams[ex.name] || 0) + ex.grams;
+    });
+
+    return reqGrams;
+  };
+
+  const handleDeductBatchIngredients = async (batchId) => {
+    if (!batchId || batchId === 'all') {
+      alert('Please select a specific batch first before performing inventory deductions.');
+      return;
+    }
+    if (deductedBatches.includes(batchId)) {
+      alert('This batch has already been deducted from your pantry stock!');
+      return;
+    }
+
+    const reqGrams = getBatchIngredientsRequired();
+    const items = Object.entries(reqGrams);
+    if (items.length === 0) {
+      alert('No ingredients required for this batch.');
+      return;
+    }
+
+    const totalWeightKg = items.reduce((sum, [, g]) => sum + g, 0) / 1000;
+
+    const confirmDeduct = window.confirm(
+      `Are you sure you want to deduct ${totalWeightKg.toFixed(2)} kg of ingredients from your Micro-Pantry stock for this batch? This action cannot be undone.`
+    );
+    if (!confirmDeduct) return;
+
+    setSavingSettings(true);
+    setStatusMsg('');
+    setErrorMessage('');
+
+    try {
+      // 1. Calculate new pantry stock levels
+      const updatedStock = { ...pantryStock };
+      items.forEach(([name, grams]) => {
+        const requiredKg = grams / 1000;
+        const currentKg = pantryStock[name] !== undefined ? pantryStock[name] : 0.0;
+        // Clamp stock level at 0.0
+        updatedStock[name] = Math.max(0, currentKg - requiredKg);
+      });
+
+      // 2. Save new stock to settings
+      const resStock = await authFetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key: 'pantryStock',
+          value: JSON.stringify(updatedStock)
+        })
+      });
+
+      if (!resStock.ok) {
+        throw new Error('Failed to save updated stock levels.');
+      }
+
+      // 3. Add batchId to deducted list and save
+      const updatedDeducted = [...deductedBatches, batchId];
+      const resDeducted = await authFetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key: 'deductedBatches',
+          value: JSON.stringify(updatedDeducted)
+        })
+      });
+
+      if (resDeducted.ok) {
+        setPantryStock(updatedStock);
+        setDeductedBatches(updatedDeducted);
+        setStatusMsg('Ingredients successfully deducted from Micro-Pantry stock!');
+      } else {
+        throw new Error('Failed to save batch deduction status.');
+      }
+    } catch (err) {
+      console.error('Error deducting ingredients:', err);
+      setErrorMessage(err.message || 'An error occurred during inventory deduction.');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
   const getBatchShortages = () => {
     if (!calculations || !calculations.summary) return [];
     const shortages = [];
@@ -1865,7 +2357,7 @@ export default function AdminDashboard() {
           let waterPart = profile.waterParts || 2;
 
           if (isStandard) {
-            const parts = starterPresetRatio.split(':').map(p => parseInt(p, 10));
+            const parts = starterPresetRatio.split(':').map(p => parseFloat(p));
             seedPart = parts[0] || 1;
             flourPart = parts[1] || 2;
             waterPart = parts[2] || 2;
@@ -1964,7 +2456,12 @@ export default function AdminDashboard() {
   };
 
   const handleSaveStock = () => {
-    savePantryStock(tempPantryStock);
+    const cleaned = {};
+    Object.keys(tempPantryStock).forEach(key => {
+      const val = tempPantryStock[key];
+      cleaned[key] = (val === '' || isNaN(parseFloat(val))) ? 0.0 : parseFloat(val);
+    });
+    savePantryStock(cleaned);
     setEditingInventory(false);
   };
 
@@ -1978,7 +2475,12 @@ export default function AdminDashboard() {
   };
 
   const handleSaveCosts = () => {
-    saveIngredientCosts(tempIngredientCosts);
+    const cleaned = {};
+    Object.keys(tempIngredientCosts).forEach(key => {
+      const val = tempIngredientCosts[key];
+      cleaned[key] = (val === '' || isNaN(parseFloat(val))) ? 0.0 : parseFloat(val);
+    });
+    saveIngredientCosts(cleaned);
     setEditingCosts(false);
   };
 
@@ -2178,6 +2680,7 @@ export default function AdminDashboard() {
               { id: 'batches', label: t('productionBatches'), icon: Layers },
               { id: 'subscriptions', label: t('standingSubscriptions'), icon: RotateCw },
               { id: 'loyalty', label: t('loyaltyTracker', { defaultValue: 'Loyalty Rewards' }), icon: Award },
+              { id: 'dispatch', label: t('dispatchBoard', { defaultValue: 'Dispatch & Packing' }), icon: Package },
               { id: 'settings', label: t('settings'), icon: Settings },
             ].map((tab) => {
               const Icon = tab.icon;
@@ -2778,7 +3281,7 @@ export default function AdminDashboard() {
                                     /* Method A: Standard ratio card */
                                     (() => {
                                       const totalTarget = target + starterReserve;
-                                      const parts = starterPresetRatio.split(':').map(p => parseInt(p, 10));
+                                      const parts = starterPresetRatio.split(':').map(p => parseFloat(p));
                                       const seedPart = parts[0] || 1;
                                       const flourPart = parts[1] || 2;
                                       const waterPart = parts[2] || 2;
@@ -3140,6 +3643,76 @@ export default function AdminDashboard() {
                           >
                             <span>{copiedShoppingList ? '✅' : '📋'}</span>
                             <span>{copiedShoppingList ? t('shoppingListCopied', { defaultValue: 'Copied to Clipboard!' }) : t('copyShoppingList', { defaultValue: 'Copy Shopping List for WhatsApp' })}</span>
+                          </button>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Automated Pantry Inventory Deduction Action Card */}
+                    {(() => {
+                      if (!selectedCalculationBatchId || selectedCalculationBatchId === 'all') {
+                        return (
+                          <div className="glass-panel rounded-3xl p-5 border border-slate-200 dark:border-slate-800 bg-white/40 dark:bg-slate-900/30 text-center py-6">
+                            <span className="text-xl block mb-2">🥣</span>
+                            <p className="text-xs text-slate-400 font-medium">
+                              {t('pantryDeductSelectBatchPrompt', { defaultValue: 'Select a specific batch from the filter dropdown above to enable automated inventory deductions.' })}
+                            </p>
+                          </div>
+                        );
+                      }
+
+                      const isDeducted = deductedBatches.includes(selectedCalculationBatchId);
+                      const reqGrams = getBatchIngredientsRequired();
+                      const items = Object.entries(reqGrams);
+                      if (items.length === 0) return null;
+
+                      const totalWeightKg = items.reduce((sum, [, g]) => sum + g, 0) / 1000;
+
+                      if (isDeducted) {
+                        return (
+                          <div className="glass-panel rounded-3xl p-4 border border-emerald-500/20 bg-emerald-500/[0.03] dark:bg-emerald-950/10 flex items-center gap-3">
+                            <span className="text-xl shrink-0">✅</span>
+                            <div>
+                              <h4 className="text-xs font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                                {t('pantryDeductedTitle', { defaultValue: 'Ingredients Deducted' })}
+                              </h4>
+                              <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed">
+                                {t('pantryDeductedDesc', { defaultValue: 'The required ingredients for this batch have already been subtracted from your Micro-Pantry stock.' })}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="glass-panel rounded-3xl p-5 border border-slate-200 dark:border-slate-800 bg-white/50 dark:bg-slate-900/40 space-y-4 shadow-sm animate-rise">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xl">🥣</span>
+                              <div>
+                                <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-100">
+                                  {t('pantryDeductTitle', { defaultValue: 'Bake Run Inventory Deduction' })}
+                                </h4>
+                                <p className="text-[10px] text-slate-400 mt-0.5">
+                                  {t('pantryDeductDesc', { defaultValue: 'Deduct required weights for this specific batch from your stocked Micro-Pantry levels in a single click.' })}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="p-3.5 rounded-2xl bg-slate-50/50 dark:bg-slate-950/40 border border-slate-200/50 dark:border-slate-800/60 text-xs flex justify-between items-center">
+                            <span className="font-semibold text-slate-600 dark:text-slate-400">{t('pantryDeductTotalWeight', { defaultValue: 'Total Ingredients to Subtract' })}:</span>
+                            <span className="font-extrabold text-slate-800 dark:text-white font-mono text-sm">{totalWeightKg.toFixed(2)} kg</span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeductBatchIngredients(selectedCalculationBatchId)}
+                            disabled={savingSettings}
+                            className="w-full py-3 rounded-2xl text-[11px] font-black uppercase tracking-wider bg-bakery-500 hover:bg-bakery-600 text-white shadow-md shadow-bakery-500/10 hover:scale-[1.01] active:scale-[0.99] transition duration-200 flex items-center justify-center gap-2 disabled:opacity-50"
+                          >
+                            <span>🥣</span>
+                            <span>{savingSettings ? t('saving', { defaultValue: 'Saving...' }) : t('pantryDeductButton', { defaultValue: 'Deduct Ingredients from Stock' })}</span>
                           </button>
                         </div>
                       );
@@ -3721,7 +4294,7 @@ export default function AdminDashboard() {
                             />
                           </div>
 
-                          <div className="lg:col-span-1">
+                           <div className="lg:col-span-1">
                             <label className="text-[9px] text-slate-400 font-bold block mb-1">{t('priceLabel')}</label>
                             <input
                               type="number"
@@ -3729,8 +4302,9 @@ export default function AdminDashboard() {
                               placeholder="e.g. 9.00"
                               value={variant.price}
                               onChange={(e) => {
+                                const rawVal = e.target.value;
                                 const list = [...newProduct.variants];
-                                list[idx].price = parseFloat(e.target.value) || 0;
+                                list[idx].price = rawVal;
                                 setNewProduct({ ...newProduct, variants: list });
                               }}
                               className="w-full text-[11px] p-2 border rounded-lg dark:bg-slate-900"
@@ -3743,18 +4317,20 @@ export default function AdminDashboard() {
                               type="number"
                               value={variant.recipe.flour}
                               onChange={(e) => {
-                                const flourVal = parseFloat(e.target.value) || 0;
+                                const rawVal = e.target.value;
                                 const list = [...newProduct.variants];
-                                list[idx].recipe.flour = flourVal;
-                                
-                                if (bakersPercentages.enabled) {
-                                  list[idx].recipe.water = Math.round(flourVal * (bakersPercentages.hydration / 100));
-                                  list[idx].recipe.starter = Math.round(flourVal * (bakersPercentages.starter / 100));
-                                  list[idx].recipe.salt = Math.round(flourVal * (bakersPercentages.salt / 100));
-                                  list[idx].recipe.extraIngredients = (bakersPercentages.extraIngredients || []).map(ext => ({
-                                    name: ext.name,
-                                    grams: Math.round(flourVal * (parseFloat(ext.percentage) || 0) / 100)
-                                  }));
+                                list[idx].recipe.flour = rawVal;
+                                if (rawVal !== '') {
+                                  const flourVal = parseFloat(rawVal);
+                                  if (!isNaN(flourVal) && bakersPercentages.enabled) {
+                                    list[idx].recipe.water = Math.round(flourVal * (bakersPercentages.hydration / 100));
+                                    list[idx].recipe.starter = Math.round(flourVal * (bakersPercentages.starter / 100));
+                                    list[idx].recipe.salt = Math.round(flourVal * (bakersPercentages.salt / 100));
+                                    list[idx].recipe.extraIngredients = (bakersPercentages.extraIngredients || []).map(ext => ({
+                                      name: ext.name,
+                                      grams: Math.round(flourVal * (parseFloat(ext.percentage) || 0) / 100)
+                                    }));
+                                  }
                                 }
                                 setNewProduct({ ...newProduct, variants: list });
                               }}
@@ -3769,8 +4345,9 @@ export default function AdminDashboard() {
                               value={variant.recipe.water}
                               readOnly={bakersPercentages.enabled}
                               onChange={(e) => {
+                                const rawVal = e.target.value;
                                 const list = [...newProduct.variants];
-                                list[idx].recipe.water = parseFloat(e.target.value) || 0;
+                                list[idx].recipe.water = rawVal;
                                 setNewProduct({ ...newProduct, variants: list });
                               }}
                               className={`w-full text-[11px] p-2 border rounded-lg dark:bg-slate-900 font-bold ${bakersPercentages.enabled ? 'bg-slate-100 dark:bg-slate-800 cursor-not-allowed opacity-80 text-slate-500' : ''}`}
@@ -3784,8 +4361,9 @@ export default function AdminDashboard() {
                               value={variant.recipe.starter}
                               readOnly={bakersPercentages.enabled}
                               onChange={(e) => {
+                                const rawVal = e.target.value;
                                 const list = [...newProduct.variants];
-                                list[idx].recipe.starter = parseFloat(e.target.value) || 0;
+                                list[idx].recipe.starter = rawVal;
                                 setNewProduct({ ...newProduct, variants: list });
                               }}
                               className={`w-full text-[11px] p-2 border rounded-lg dark:bg-slate-900 font-bold ${bakersPercentages.enabled ? 'bg-slate-100 dark:bg-slate-800 cursor-not-allowed opacity-80 text-slate-500' : ''}`}
@@ -3819,8 +4397,9 @@ export default function AdminDashboard() {
                               value={variant.recipe.salt}
                               readOnly={bakersPercentages.enabled}
                               onChange={(e) => {
+                                const rawVal = e.target.value;
                                 const list = [...newProduct.variants];
-                                list[idx].recipe.salt = parseFloat(e.target.value) || 0;
+                                list[idx].recipe.salt = rawVal;
                                 setNewProduct({ ...newProduct, variants: list });
                               }}
                               className={`w-full text-[11px] p-2 border rounded-lg dark:bg-slate-900 font-bold ${bakersPercentages.enabled ? 'bg-slate-100 dark:bg-slate-800 cursor-not-allowed opacity-80 text-slate-500' : ''}`}
@@ -3932,8 +4511,9 @@ export default function AdminDashboard() {
                                           placeholder="%"
                                           value={fb.percentage}
                                           onChange={(e) => {
+                                            const rawVal = e.target.value;
                                             const list = [...newProduct.variants];
-                                            list[idx].recipe.floursBreakdown[fbIdx].percentage = parseInt(e.target.value) || 0;
+                                            list[idx].recipe.floursBreakdown[fbIdx].percentage = rawVal;
                                             setNewProduct({ ...newProduct, variants: list });
                                           }}
                                           className="w-12 text-[11px] p-1.5 border rounded-lg dark:bg-slate-900 font-bold text-center"
@@ -4080,7 +4660,10 @@ export default function AdminDashboard() {
                                             type="number"
                                             placeholder="Weight"
                                             value={ext.grams}
-                                            onChange={(e) => updateManualExtraIngredient(idx, extIdx, 'grams', parseFloat(e.target.value) || 0)}
+                                            onChange={(e) => {
+                                              const rawVal = e.target.value;
+                                              updateManualExtraIngredient(idx, extIdx, 'grams', rawVal === '' ? '' : (parseFloat(rawVal) || 0));
+                                            }}
                                             className="w-12 text-[11px] p-1.5 border rounded-lg dark:bg-slate-950 dark:border-slate-800 font-bold text-center"
                                           />
                                           <span className="text-slate-400 text-[10px]">g</span>
@@ -4418,7 +5001,7 @@ export default function AdminDashboard() {
                       filteredOrders.map((o) => {
                         const isSelected = selectedOrdersForBatch.includes(o.id);
                         return (
-                          <tr key={o.id} className="hover:bg-slate-200/40 dark:hover:bg-slate-900/20 transition">
+                          <tr key={o.id} className={`hover:bg-slate-200/40 dark:hover:bg-slate-900/20 transition ${updatingOrderIds.includes(o.id) ? 'animate-pulse bg-amber-500/5 pointer-events-none' : ''}`}>
                           <td className="p-4 text-center">
                             <input
                               type="checkbox"
@@ -4522,19 +5105,26 @@ export default function AdminDashboard() {
                             </span>
                           </td>
                           <td className="p-4 flex gap-1 justify-end">
-                            {['PENDING', 'CONFIRMED', 'IN_PRODUCTION', 'BAKED', 'COMPLETED'].map((st) => (
-                              <button
-                                key={st}
-                                onClick={() => handleOrderStatus(o.id, st)}
-                                className={`px-2 py-1 text-[9px] font-black rounded ${
-                                  o.status === st 
-                                    ? 'bg-bakery-500 text-white' 
-                                    : 'bg-slate-200 dark:bg-slate-800 text-slate-500 hover:bg-slate-300'
-                                }`}
-                              >
-                                {st.replace('_', ' ')}
-                              </button>
-                            ))}
+                            {['PENDING', 'CONFIRMED', 'IN_PRODUCTION', 'BAKED', 'COMPLETED'].map((st) => {
+                              const isUpdating = updatingOrderIds.includes(o.id);
+                              return (
+                                <button
+                                  key={st}
+                                  disabled={isUpdating}
+                                  onClick={() => handleOrderStatus(o.id, st)}
+                                  className={`px-2 py-1 text-[9px] font-black rounded flex items-center gap-1 transition-all ${
+                                    o.status === st 
+                                      ? 'bg-bakery-500 text-white' 
+                                      : 'bg-slate-200 dark:bg-slate-800 text-slate-500 hover:bg-slate-300'
+                                  } ${isUpdating ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                >
+                                  {updatingOrderIds.includes(`${o.id}-${st}`) && (
+                                    <RotateCw className="w-2.5 h-2.5 animate-spin" />
+                                  )}
+                                  {st.replace('_', ' ')}
+                                </button>
+                              );
+                            })}
                           </td>
                         </tr>
                         );
@@ -5160,9 +5750,14 @@ export default function AdminDashboard() {
                                     min="0"
                                     value={tempVal}
                                     onChange={(e) => {
-                                      const val = parseFloat(e.target.value);
-                                      if (!isNaN(val) && val >= 0) {
-                                        setTempIngredientCosts({ ...tempIngredientCosts, [ing]: val });
+                                      const raw = e.target.value;
+                                      if (raw === "") {
+                                        setTempIngredientCosts({ ...tempIngredientCosts, [ing]: "" });
+                                      } else {
+                                        const val = parseFloat(raw);
+                                        if (!isNaN(val) && val >= 0) {
+                                          setTempIngredientCosts({ ...tempIngredientCosts, [ing]: val });
+                                        }
                                       }
                                     }}
                                     className="p-1 w-16 text-center text-xs rounded-lg border dark:bg-slate-950 dark:border-slate-800 bg-white font-mono font-bold text-slate-800 dark:text-slate-100"
@@ -5181,8 +5776,264 @@ export default function AdminDashboard() {
                   </div>
                 </div>
               </div>
+
+            {/* Sourdough Analytics: Sales Forecasting & Ingredient Planning Section */}
+            <div className="border-t border-slate-200 dark:border-slate-800 pt-6 mt-8 space-y-6">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                  <h3 className="text-md font-extrabold text-slate-800 dark:text-white flex items-center gap-2">
+                    <span>🔮</span> Intelligent Ingredient &amp; Stock Forecasting
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Predict wholesale flour varieties, starter quantities, and extras required by combining future bakes and active subscription trends.
+                  </p>
+                </div>
+
+                {/* Preset Selector */}
+                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200/50 dark:border-slate-800">
+                  {[
+                    { days: 7, label: '7 Days' },
+                    { days: 14, label: '14 Days' },
+                    { days: 30, label: '30 Days' },
+                  ].map((preset) => (
+                    <button
+                      key={preset.days}
+                      onClick={() => {
+                        setForecastDays(preset.days);
+                        fetchForecast(preset.days);
+                      }}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                        forecastDays === preset.days
+                          ? 'bg-bakery-500 text-white shadow shadow-bakery-500/25'
+                          : 'text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {loadingForecast ? (
+                <div className="glass-panel rounded-3xl p-12 text-center border border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center gap-3">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-bakery-500"></div>
+                  <span className="text-xs text-slate-500 font-bold">Recalibrating artisan stock models and scaling recipe allocations...</span>
+                </div>
+              ) : !forecastData ? (
+                <div className="glass-panel rounded-3xl p-12 text-center border border-slate-200 dark:border-slate-800 text-slate-500 text-xs">
+                  Select a forecast period to load ingredient planning projections.
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Summary Row */}
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                    <div className="glass-panel rounded-2xl p-4 border border-slate-200 dark:border-slate-800 bg-white/40 dark:bg-slate-900/20 backdrop-blur-md shadow-sm">
+                      <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Forecast Horizon</span>
+                      <span className="text-lg font-black text-slate-800 dark:text-white mt-1 block font-mono">{forecastData.days} Days</span>
+                    </div>
+                    <div className="glass-panel rounded-2xl p-4 border border-slate-200 dark:border-slate-800 bg-white/40 dark:bg-slate-900/20 backdrop-blur-md shadow-sm">
+                      <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Baking Days Scheduled</span>
+                      <span className="text-lg font-black text-slate-800 dark:text-white mt-1 block font-mono">{forecastData.batchesCount} Bakes</span>
+                    </div>
+                    <div className="glass-panel rounded-2xl p-4 border border-slate-200 dark:border-slate-800 bg-white/40 dark:bg-slate-900/20 backdrop-blur-md shadow-sm">
+                      <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Orders Processed</span>
+                      <span className="text-lg font-black text-slate-800 dark:text-white mt-1 block font-mono">{forecastData.ordersCount} Orders</span>
+                    </div>
+                    <div className="glass-panel rounded-2xl p-4 border border-slate-200 dark:border-slate-800 bg-white/40 dark:bg-slate-900/20 backdrop-blur-md shadow-sm">
+                      <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Standing Subscriptions</span>
+                      <span className="text-lg font-black text-slate-800 dark:text-white mt-1 block font-mono">{forecastData.subscriptionsCount} Active</span>
+                    </div>
+                  </div>
+
+                  {/* Main Splitted Grid of Flour varieties, Core inputs, Extras */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Left: Flour Breakdown Column */}
+                    <div className="glass-panel rounded-3xl p-6 border border-slate-200 dark:border-slate-800 bg-white/30 dark:bg-slate-900/30 space-y-4">
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+                        <span className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                          <span>🌾</span> Wholesale Flour Projections
+                        </span>
+                        <span className="text-[11px] font-bold font-mono text-slate-500">
+                          Total: {((forecastData.summary.totalFlour || 0) / 1000).toFixed(2)} kg
+                        </span>
+                      </div>
+
+                      <div className="space-y-4">
+                        {(forecastData.summary.floursBreakdown || []).length === 0 ? (
+                          <span className="text-xs text-slate-400 italic block py-4 text-center">No flour requirements detected.</span>
+                        ) : (
+                          forecastData.summary.floursBreakdown.map((fl) => {
+                            const pct = forecastData.summary.totalFlour > 0 ? (fl.grams / forecastData.summary.totalFlour) * 100 : 0;
+                            return (
+                              <div key={fl.name} className="space-y-1">
+                                <div className="flex justify-between items-center text-xs">
+                                  <span className="font-bold text-slate-700 dark:text-slate-300">{fl.name}</span>
+                                  <span className="font-bold font-mono text-slate-800 dark:text-slate-100">
+                                    {(fl.grams / 1000).toFixed(2)} kg <span className="text-[10px] text-slate-400 font-medium">({pct.toFixed(0)}%)</span>
+                                  </span>
+                                </div>
+                                <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                                  <div
+                                    className="bg-amber-500 dark:bg-amber-600 h-full rounded-full transition-all duration-500"
+                                    style={{ width: `${pct}%` }}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Middle: Core Constituent Ingredients & Extras */}
+                    <div className="glass-panel rounded-3xl p-6 border border-slate-200 dark:border-slate-800 bg-white/30 dark:bg-slate-900/30 space-y-4">
+                      <div className="pb-2 border-b border-slate-200 dark:border-slate-800">
+                        <span className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                          <span>🧪</span> Core Sourdough Inputs
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-4">
+                        <div className="flex items-center justify-between p-3 rounded-2xl bg-white/50 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-850 shadow-sm">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">💧</span>
+                            <div>
+                              <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">Water Quantity</span>
+                              <span className="text-[10px] text-slate-400">Average hydration scale</span>
+                            </div>
+                          </div>
+                          <span className="text-xs font-bold font-mono text-slate-800 dark:text-slate-100">
+                            {((forecastData.summary.totalWater || 0) / 1000).toFixed(2)} L
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between p-3 rounded-2xl bg-white/50 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-850 shadow-sm">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">🧬</span>
+                            <div>
+                              <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">Levain / Starter</span>
+                              <span className="text-[10px] text-slate-400">Leavening agent scale</span>
+                            </div>
+                          </div>
+                          <span className="text-xs font-bold font-mono text-slate-800 dark:text-slate-100">
+                            {((forecastData.summary.totalStarter || 0) / 1000).toFixed(2)} kg
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between p-3 rounded-2xl bg-white/50 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-850 shadow-sm">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">🧂</span>
+                            <div>
+                              <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">Sea Salt</span>
+                              <span className="text-[10px] text-slate-400">NaCl mineral weight</span>
+                            </div>
+                          </div>
+                          <span className="text-xs font-bold font-mono text-slate-800 dark:text-slate-100">
+                            {((forecastData.summary.totalSalt || 0) / 1000).toFixed(2)} kg
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Extras Breakdown */}
+                      <div className="pt-2">
+                        <div className="pb-1 mb-2 border-b border-slate-100 dark:border-slate-800">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">✨ Recipe Extras &amp; Inclusions</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {(forecastData.summary.extrasBreakdown || []).length === 0 ? (
+                            <span className="text-[10px] text-slate-400 italic">No extra inclusions forecasted.</span>
+                          ) : (
+                            forecastData.summary.extrasBreakdown.map((ext) => (
+                              <span
+                                key={ext.name}
+                                className="text-[10px] font-extrabold px-2 py-1 rounded-lg bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-100/50 dark:border-indigo-800/20 font-mono shadow-sm"
+                              >
+                                {ext.name}: {(ext.grams / 1000).toFixed(2)} kg
+                              </span>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: Projected Product Counts & Clipboard copy */}
+                    <div className="glass-panel rounded-3xl p-6 border border-slate-200 dark:border-slate-800 bg-white/30 dark:bg-slate-900/30 flex flex-col justify-between space-y-4">
+                      <div className="space-y-4">
+                        <div className="pb-2 border-b border-slate-200 dark:border-slate-800">
+                          <span className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                            <span>🍞</span> Upcoming Product Counts
+                          </span>
+                        </div>
+
+                        <div className="max-h-48 overflow-y-auto space-y-2 pr-1 divide-y divide-slate-100 dark:divide-slate-850">
+                          {(forecastData.productQuantities || []).length === 0 ? (
+                            <span className="text-xs text-slate-400 italic block py-4 text-center">No production items scheduled.</span>
+                          ) : (
+                            forecastData.productQuantities.map((item, idx) => (
+                              <div key={idx} className="flex justify-between items-center text-xs py-1.5">
+                                <div>
+                                  <span className="font-bold text-slate-700 dark:text-slate-300 block">{item.productName}</span>
+                                  <span className="text-[10px] text-slate-400 block">{item.size}</span>
+                                </div>
+                                <span className="font-black font-mono text-bakery-600 dark:text-bakery-400 text-sm">
+                                  x{item.quantity}
+                                </span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Wholesaler order list copier */}
+                      <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
+                        <button
+                          onClick={() => {
+                            const generateCopyText = () => {
+                              let txt = `=== Artisan BakEngine Wholesaler Order List ===\n`;
+                              txt += `Forecast Range: ${forecastData.days} Days\n`;
+                              txt += `Generated: ${new Date().toLocaleString()}\n`;
+                              txt += `Scheduled Bakes: ${forecastData.batchesCount}\n`;
+                              txt += `Orders Aggregated: ${forecastData.ordersCount}\n\n`;
+                              
+                              txt += `CORE FLOUR DETAILS:\n`;
+                              if ((forecastData.summary.floursBreakdown || []).length === 0) {
+                                txt += `- No flours required.\n`;
+                              } else {
+                                forecastData.summary.floursBreakdown.forEach(fl => {
+                                  txt += `- ${fl.name}: ${(fl.grams / 1000).toFixed(2)} kg\n`;
+                                });
+                              }
+                              txt += `\nCORE CONSTITUENT INGREDIENTS:\n`;
+                              txt += `- Water: ${(forecastData.summary.totalWater / 1000).toFixed(2)} L\n`;
+                              txt += `- Sourdough Starter: ${(forecastData.summary.totalStarter / 1000).toFixed(2)} kg\n`;
+                              txt += `- Sea Salt: ${(forecastData.summary.totalSalt / 1000).toFixed(2)} kg\n`;
+                              
+                              if ((forecastData.summary.extrasBreakdown || []).length > 0) {
+                                txt += `\nRECIPE EXTRAS & INCLUSIONS:\n`;
+                                forecastData.summary.extrasBreakdown.forEach(ext => {
+                                  txt += `- ${ext.name}: ${(ext.grams / 1000).toFixed(2)} kg\n`;
+                                });
+                              }
+                              
+                              txt += `\n==============================================`;
+                              return txt;
+                            };
+                            
+                            navigator.clipboard.writeText(generateCopyText());
+                            setStatusMsg('📋 Wholesaler order list copied to clipboard!');
+                          }}
+                          className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-bakery-500 hover:from-amber-600 hover:to-bakery-600 text-white text-xs font-black py-2.5 px-4 rounded-xl shadow-lg shadow-bakery-500/15 active:scale-98 transition duration-200"
+                        >
+                          <span>📋</span> Copy Wholesaler Order List
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-          );
+          </div>
+        );
         })()}
 
         {/* 7. THERMAL LABEL PRINT SHOP SECTION (Optimized CSS Media query and standard roll previews) */}
@@ -5607,6 +6458,92 @@ export default function AdminDashboard() {
                       </div>
                     </div>
 
+                    {/* Visual Digital Loyalty Card Section */}
+                    {(() => {
+                      const currentUser = loyaltyList.find(u => u.id === selectedLoyaltyUser.id) || selectedLoyaltyUser;
+                      return (
+                        <div className="space-y-4">
+                          <h4 className="text-xs font-extrabold uppercase tracking-widest text-slate-400">
+                            Digital Stamp Card
+                          </h4>
+
+                          {/* Card Container - Cardboard Aesthetics */}
+                          <div className="bg-gradient-to-br from-amber-50/90 to-amber-100/40 dark:from-slate-950/80 dark:to-slate-900/40 border border-amber-200/50 dark:border-amber-900/30 rounded-3xl p-5 shadow-sm space-y-4 relative overflow-hidden">
+                            {/* Decorative background grains or circles */}
+                            <div className="absolute top-0 right-0 -translate-y-12 translate-x-12 w-32 h-32 bg-amber-500/5 rounded-full blur-2xl" />
+
+                            <div className="flex justify-between items-center pb-2 border-b border-amber-200/30 dark:border-slate-800">
+                              <div>
+                                <span className="text-[11px] font-bold text-amber-800 dark:text-amber-500 block uppercase tracking-wider">Sourdough Stamp Card</span>
+                                <span className="text-[10px] text-slate-500">Every 10 purchases = 1 Free Loaf!</span>
+                              </div>
+                              <span className="text-xl">🥖</span>
+                            </div>
+
+                            {/* Stamp Grid */}
+                            <div className="grid grid-cols-5 sm:grid-cols-10 gap-2.5">
+                              {Array.from({ length: 10 }).map((_, idx) => {
+                                const isStamped = idx < currentUser.currentProgress;
+                                return (
+                                  <div
+                                    key={idx}
+                                    className={`aspect-square flex items-center justify-center rounded-2xl border-2 transition-all duration-300 relative ${
+                                      isStamped
+                                        ? 'bg-amber-100/50 dark:bg-amber-950/40 border-amber-400 dark:border-amber-600 shadow shadow-amber-400/10 scale-105 animate-bounce-short'
+                                        : 'border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/30 text-slate-400 dark:text-slate-600'
+                                    }`}
+                                  >
+                                    {isStamped ? (
+                                      <span className="text-lg filter drop-shadow hover:rotate-12 transition transform duration-200 cursor-pointer">🍞</span>
+                                    ) : (
+                                      <span className="text-[9px] font-black font-mono select-none">{idx + 1}</span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Card Footer Text */}
+                            <div className="flex justify-between items-center text-[10px] text-slate-500 pt-1">
+                              <span>Stamps progress: <strong className="font-mono text-amber-700 dark:text-amber-500">{currentUser.currentProgress}/10</strong></span>
+                              <span>Outstanding Free Loaves: <strong className="font-mono text-emerald-600 dark:text-emerald-400">{currentUser.freeRemaining}</strong></span>
+                            </div>
+                          </div>
+
+                          {/* Admin Adjustments Controls */}
+                          <div className="flex flex-wrap gap-2 justify-between items-center p-3 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-850">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                              Admin Stamp Adjustment
+                            </span>
+                            <div className="flex gap-1.5">
+                              <button
+                                onClick={() => adjustManualStamps(currentUser.id, -1)}
+                                className="px-2.5 py-1 bg-white hover:bg-slate-100 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 text-[10px] font-black rounded-lg transition active:scale-95"
+                                title="Remove 1 Stamp"
+                              >
+                                ➖ Remove Stamp
+                              </button>
+                              <button
+                                onClick={() => adjustManualStamps(currentUser.id, 1)}
+                                className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-black rounded-lg transition shadow-sm shadow-amber-500/10 active:scale-95"
+                                title="Add 1 Stamp"
+                              >
+                                ➕ Add Stamp
+                              </button>
+                              {currentUser.freeRemaining > 0 && (
+                                <button
+                                  onClick={() => redeemLoyaltyLoaf(currentUser.id)}
+                                  className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-black rounded-lg transition shadow-sm shadow-emerald-500/10 active:scale-95"
+                                >
+                                  🏆 Redeem Free Loaf
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {/* Ledger purchases list */}
                     <div className="space-y-2">
                       <h4 className="text-xs font-extrabold uppercase tracking-widest text-slate-400">
@@ -5666,123 +6603,928 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* 9. SETTINGS TAB PANEL */}
-        {activeTab === 'settings' && (
-          <div className="space-y-6 no-print animate-rise">
-            <div>
-              <h2 className="text-xl font-extrabold text-slate-800 dark:text-white">{t('settings')}</h2>
-              <p className="text-xs text-slate-500">{t('bakingDaysConfig')}</p>
-            </div>
+        {/* 9. DISPATCH, BAGGING CHECKLIST & CUBBY BOARD */}
+        {activeTab === 'dispatch' && (() => {
+          // Sync default batch if none selected
+          if (!selectedDispatchBatchId && batches.length > 0) {
+            setSelectedDispatchBatchId(batches[0].id);
+          }
 
-            <div className="glass-card rounded-3xl p-6 border border-slate-200 dark:border-slate-800/60 shadow-lg max-w-2xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-md">
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 pb-3 border-b border-slate-200 dark:border-slate-800/60">
-                  <span className="text-lg">📅</span>
-                  <h3 className="text-sm font-bold text-slate-800 dark:text-white">
-                    {t('bakingDaysConfig', { defaultValue: 'Baking Days' })}
-                  </h3>
+          const currentBatch = batches.find(b => b.id === selectedDispatchBatchId);
+          
+          // Get all orders belonging to selected batch
+          const batchOrders = orders.filter(o => o.batchId === selectedDispatchBatchId);
+          
+          // Get unique pickup slots inside this batch for filtering
+          const uniqueSlots = Array.from(new Set(batchOrders.map(o => o.pickupSlot).filter(Boolean)));
+          
+          // Filter orders based on selected slot and search query
+          const filteredOrders = batchOrders.filter(o => {
+            const matchesSlot = selectedDispatchSlot === 'all' || o.pickupSlot === selectedDispatchSlot;
+            
+            let nameQuery = searchDispatchQuery.toLowerCase();
+            const matchesSearch = !searchDispatchQuery || 
+              (o.internalCustomer || o.user?.name || '').toLowerCase().includes(nameQuery) ||
+              (o.user?.email || '').toLowerCase().includes(nameQuery) ||
+              (o.user?.phone || '').toLowerCase().includes(nameQuery) ||
+              (o.items || []).some(item => (item.productVariant?.product?.name || '').toLowerCase().includes(nameQuery));
+              
+            return matchesSlot && matchesSearch;
+          });
+
+          // Calculations for stats
+          const totalOrdersCount = batchOrders.length;
+          
+          const getCheckedInfo = (order) => {
+            const meta = ordersMetadata[order.id] || { cubby: '', checkedItems: [] };
+            const checkedItems = meta.checkedItems || [];
+            const isBagged = order.items.length > 0 && order.items.every(item => checkedItems.includes(item.id));
+            return { checkedItems, isBagged, cubby: meta.cubby || '' };
+          };
+
+          const baggedOrdersCount = batchOrders.filter(o => getCheckedInfo(o).isBagged).length;
+          const completedOrdersCount = batchOrders.filter(o => o.status === 'COMPLETED').length;
+          const pendingOrdersCount = totalOrdersCount - completedOrdersCount;
+
+          return (
+            <div className="space-y-6 no-print animate-rise">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                  <h2 className="text-xl font-extrabold text-slate-800 dark:text-white">
+                    📦 {t('dispatchBoardTitle', { defaultValue: 'No-Mistake Dispatch & Packing Board' })}
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Check off baked products, allocate shelf/cubby storage, and notify customers directly via WhatsApp.
+                  </p>
                 </div>
 
-                <p className="text-xs text-slate-500 leading-relaxed">
-                  {t('bakingDaysDesc', { defaultValue: 'Select which days of the week you bake. Customers will see upcoming dates for these days during checkout.' })}
-                </p>
+                {/* Batch Selector Dropdown */}
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-bold text-slate-500">Active Batch:</label>
+                  <select
+                    value={selectedDispatchBatchId}
+                    onChange={(e) => {
+                      setSelectedDispatchBatchId(e.target.value);
+                      setSelectedDispatchSlot('all');
+                    }}
+                    className="p-2 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-bakery-500/20"
+                  >
+                    {batches.length === 0 ? (
+                      <option value="">No batches found</option>
+                    ) : (
+                      batches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {new Date(b.date).toLocaleDateString()} - #{b.id.slice(0, 8).toUpperCase()} ({b.status})
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+              </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-                  {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day) => {
-                    const isChecked = bakingDays.includes(day);
+              {/* Stat Widgets */}
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                <div className="glass-panel rounded-2xl p-4 border border-slate-200 dark:border-slate-800 flex items-center justify-between shadow bg-white/40 dark:bg-slate-900/10">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Total Batch Orders</span>
+                    <span className="text-xl font-black text-slate-800 dark:text-white mt-1 block font-mono">{totalOrdersCount}</span>
+                  </div>
+                  <span className="text-2xl">📋</span>
+                </div>
+
+                <div className="glass-panel rounded-2xl p-4 border border-slate-200 dark:border-slate-800 flex items-center justify-between shadow bg-white/40 dark:bg-slate-900/10">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Bagging Completion</span>
+                    <span className="text-xl font-black text-slate-800 dark:text-white mt-1 block font-mono">
+                      {baggedOrdersCount} / {totalOrdersCount}
+                    </span>
+                  </div>
+                  <span className="text-2xl">📦</span>
+                </div>
+
+                <div className="glass-panel rounded-2xl p-4 border border-slate-200 dark:border-slate-800 flex items-center justify-between shadow bg-white/40 dark:bg-slate-900/10">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Pending Pickups</span>
+                    <span className="text-xl font-black text-orange-600 dark:text-orange-400 mt-1 block font-mono">{pendingOrdersCount}</span>
+                  </div>
+                  <span className="text-2xl">⏳</span>
+                </div>
+
+                <div className="glass-panel rounded-2xl p-4 border border-slate-200 dark:border-slate-800 flex items-center justify-between shadow bg-white/40 dark:bg-slate-900/10">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Collected / Finished</span>
+                    <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-1 block font-mono">{completedOrdersCount}</span>
+                  </div>
+                  <span className="text-2xl">✅</span>
+                </div>
+              </div>
+
+              {/* Progress Bar of Completion */}
+              <div className="w-full bg-slate-100 dark:bg-slate-900 h-2.5 rounded-full overflow-hidden border border-slate-200/50 dark:border-slate-800/60 p-0.5">
+                <div
+                  className="bg-gradient-to-r from-amber-500 to-emerald-500 h-full rounded-full transition-all duration-500"
+                  style={{ width: `${totalOrdersCount > 0 ? (baggedOrdersCount / totalOrdersCount) * 100 : 0}%` }}
+                />
+              </div>
+
+              {/* Filters Toolbar */}
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                {/* Search Bar */}
+                <div className="relative max-w-sm w-full">
+                  <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by customer, phone, email, or breads..."
+                    value={searchDispatchQuery}
+                    onChange={(e) => setSearchDispatchQuery(e.target.value)}
+                    className="w-full text-xs pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white/50 dark:bg-slate-950/40 focus:ring-2 focus:ring-bakery-500/20 font-semibold"
+                  />
+                </div>
+
+                {/* Pickup Slot Filters Preset Pills */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    onClick={() => setSelectedDispatchSlot('all')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
+                      selectedDispatchSlot === 'all'
+                        ? 'bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 shadow'
+                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-150 dark:hover:bg-slate-900 bg-white dark:bg-slate-950 border border-slate-200/40 dark:border-slate-800/40'
+                    }`}
+                  >
+                    All Pickup Slots
+                  </button>
+                  {uniqueSlots.map((slot) => (
+                    <button
+                      key={slot}
+                      onClick={() => setSelectedDispatchSlot(slot)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
+                        selectedDispatchSlot === slot
+                          ? 'bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 shadow'
+                          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-150 dark:hover:bg-slate-900 bg-white dark:bg-slate-950 border border-slate-200/40 dark:border-slate-800/40'
+                      }`}
+                    >
+                      {slot}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Grid of Customer Packing Cards */}
+              {filteredOrders.length === 0 ? (
+                <div className="glass-panel rounded-3xl p-12 text-center text-xs text-slate-500 border border-dashed dark:border-slate-800 bg-white/20 dark:bg-slate-900/10">
+                  No orders match the selected filters or batch criteria.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredOrders.map((order) => {
+                    const { checkedItems, isBagged, cubby } = getCheckedInfo(order);
+                    const customerName = order.internalCustomer || order.user?.name || 'Anonymous Customer';
+                    const customerPhone = order.user?.phone || '';
+                    const itemsStr = order.items.map(item => `${item.quantity}x ${item.productVariant?.product?.name || 'Artisan Bread'} (${item.productVariant?.size || 'Standard'})`).join(', ');
+
+                    const handleItemCheckToggle = (itemId) => {
+                      let newChecked = [...checkedItems];
+                      if (newChecked.includes(itemId)) {
+                        newChecked = newChecked.filter(id => id !== itemId);
+                      } else {
+                        newChecked.push(itemId);
+                      }
+                      
+                      const newMeta = {
+                        cubby,
+                        checkedItems: newChecked,
+                        baggedAt: newChecked.length === order.items.length ? new Date().toISOString() : null
+                      };
+                      saveOrderMetadata(order.id, newMeta);
+                    };
+
+                    const handleCubbyChange = (newCubby) => {
+                      const newMeta = {
+                        cubby: newCubby,
+                        checkedItems,
+                        baggedAt: isBagged ? new Date().toISOString() : null
+                      };
+                      saveOrderMetadata(order.id, newMeta);
+                    };
+
+                    const handleWhatsAppPing = () => {
+                      if (!customerPhone) {
+                        setErrorMessage('Customer phone contact is not available.');
+                        return;
+                      }
+                      
+                      // Strip non-digits from phone
+                      const sanitizedPhone = customerPhone.replace(/\D/g, '');
+                      
+                      let msg = '';
+                      if (order.status === 'COMPLETED') {
+                        msg = `Hi ${customerName}! Thank you for picking up your bakes today! Enjoy your bread! 🍞`;
+                      } else {
+                        const cubbyText = cubby ? `in Shelf Cubby *${cubby}*` : 'at our pickup shelf';
+                        msg = `Hi ${customerName}! 🥖 Your Artisan BakEngine order of *${itemsStr}* is bagged and waiting for you ${cubbyText}! See you during your pickup slot (${order.pickupSlot || 'today'}). 🍞`;
+                      }
+
+                      const waUrl = `https://wa.me/${sanitizedPhone}?text=${encodeURIComponent(msg)}`;
+                      window.open(waUrl, '_blank');
+                    };
+
                     return (
-                      <label
-                        key={day}
-                        className={`flex items-center gap-2.5 p-3.5 rounded-2xl border transition cursor-pointer select-none ${
-                          isChecked
-                            ? 'bg-bakery-500/10 border-bakery-500 text-bakery-600 dark:text-bakery-400 font-extrabold shadow shadow-bakery-500/5'
-                            : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800/60 text-slate-600 dark:text-slate-400 font-medium hover:bg-slate-50 dark:hover:bg-slate-900/40'
+                      <div
+                        key={order.id}
+                        className={`glass-panel rounded-3xl p-5 border transition-all duration-300 flex flex-col justify-between space-y-4 shadow bg-white/30 dark:bg-slate-900/20 backdrop-blur-md relative overflow-hidden ${
+                          isBagged
+                            ? 'border-emerald-500/50 dark:border-emerald-500/40 shadow-lg shadow-emerald-500/5 ring-1 ring-emerald-400/10'
+                            : 'border-slate-200 dark:border-slate-800'
                         }`}
                       >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => {
-                            let newDays;
-                            if (isChecked) {
-                              newDays = bakingDays.filter((d) => d !== day);
-                            } else {
-                              newDays = [...bakingDays, day];
-                            }
-                            if (newDays.length === 0) return;
-                            saveSettings(newDays);
-                          }}
-                          className="w-4 h-4 rounded text-bakery-500 border-slate-300 focus:ring-bakery-500/20"
-                        />
-                        <span className="text-xs capitalize">{t(day.toLowerCase())}</span>
-                      </label>
+                        {updatingOrderIds.includes(order.id) && (
+                          <div className="absolute top-0 left-0 right-0 h-1.5 animate-shimmer-brown overflow-hidden" />
+                        )}
+                        {/* Card Header */}
+                        <div className="space-y-1">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <h4 className="text-xs font-black text-slate-800 dark:text-white line-clamp-1">
+                                {customerName}
+                              </h4>
+                              <span className="text-[10px] text-slate-400 font-bold block">
+                                Order: <strong className="font-mono">#{order.id.slice(0, 8).toUpperCase()}</strong>
+                              </span>
+                            </div>
+
+                            {/* Status Badge */}
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                              order.status === 'COMPLETED'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                : order.status === 'BAKED'
+                                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 animate-pulse'
+                                  : 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300'
+                            }`}>
+                              {order.status}
+                            </span>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-400 font-bold">
+                            <span className="bg-slate-100 dark:bg-slate-950 px-2 py-0.5 rounded-md text-[9px] border dark:border-slate-850">
+                              ⏰ {order.pickupSlot || 'No slot'}
+                            </span>
+                            {customerPhone && (
+                              <span className="text-slate-500 font-mono">
+                                📞 {customerPhone}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Middle: Bagging Checklist */}
+                        <div className="space-y-2 border-t border-b border-slate-150 dark:border-slate-800/60 py-3 my-1">
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">
+                            Packing Checklist
+                          </span>
+                          <div className="space-y-1.5">
+                            {order.items.map((item) => {
+                              const isChecked = checkedItems.includes(item.id);
+                              return (
+                                <button
+                                  key={item.id}
+                                  onClick={() => handleItemCheckToggle(item.id)}
+                                  className={`w-full text-left p-2.5 rounded-xl border text-xs font-bold transition flex items-center gap-2.5 ${
+                                    isChecked
+                                      ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-300/40 dark:border-emerald-900/20 text-emerald-800 dark:text-emerald-300 line-through decoration-emerald-500/35 decoration-2'
+                                      : 'bg-slate-50/80 dark:bg-slate-950/40 border-slate-200/50 dark:border-slate-850 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-850 hover:bg-slate-100/50'
+                                  }`}
+                                >
+                                  <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all ${
+                                    isChecked
+                                      ? 'bg-emerald-500 border-emerald-500 text-white'
+                                      : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900'
+                                  }`}>
+                                    {isChecked && <span className="text-[10px] leading-none">✓</span>}
+                                  </div>
+                                  <div className="flex justify-between w-full items-center">
+                                    <span className="truncate">{item.productVariant?.product?.name || 'Artisan Bread'}</span>
+                                    <span className="font-mono text-[10px] bg-slate-200 dark:bg-slate-850 text-slate-600 dark:text-slate-400 px-1.5 py-0.5 rounded">
+                                      {item.productVariant?.size} x{item.quantity}
+                                    </span>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Card Footer: Cubby Input, WhatsApp Notification, Transition Button */}
+                        <div className="space-y-3 pt-1">
+                          {/* Cubby Slot Input */}
+                          <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-950 p-2 rounded-xl border border-slate-150 dark:border-slate-850">
+                            <span className="text-xs">🏷️</span>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest shrink-0">Cubby / Shelf:</span>
+                            <input
+                              type="text"
+                              placeholder="e.g. A3"
+                              value={cubby}
+                              onChange={(e) => handleCubbyChange(e.target.value.toUpperCase())}
+                              className="bg-transparent text-xs font-black font-mono border-none focus:outline-none p-0 focus:ring-0 text-slate-800 dark:text-slate-100 placeholder-slate-400 w-full"
+                            />
+                          </div>
+
+                          <div className="flex gap-2">
+                            {/* WhatsApp Button */}
+                            <button
+                              onClick={handleWhatsAppPing}
+                              disabled={!customerPhone}
+                              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-black transition ${
+                                customerPhone
+                                  ? 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-850 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800'
+                                  : 'bg-slate-50 dark:bg-slate-900 text-slate-400 dark:text-slate-600 cursor-not-allowed border border-transparent'
+                              }`}
+                              title={customerPhone ? 'Open prefilled WhatsApp message' : 'Customer phone number not available'}
+                            >
+                              <MessageSquare size={13} />
+                              <span>Ping WA</span>
+                            </button>
+
+                            {/* State Transition Button */}
+                            {order.status !== 'COMPLETED' ? (
+                              <button
+                                disabled={updatingOrderIds.includes(order.id)}
+                                onClick={async () => {
+                                  // Determine next valid state transition
+                                  let nextState = 'CONFIRMED';
+                                  if (order.status === 'PENDING') nextState = 'CONFIRMED';
+                                  else if (order.status === 'CONFIRMED') nextState = 'IN_PRODUCTION';
+                                  else if (order.status === 'IN_PRODUCTION') nextState = 'BAKED';
+                                  else if (order.status === 'BAKED') nextState = 'COMPLETED';
+
+                                  await handleOrderStatus(order.id, nextState);
+                                }}
+                                className={`flex-1 bg-bakery-500 hover:bg-bakery-600 text-white font-black text-xs py-2 px-3 rounded-xl transition active:scale-95 shadow-md shadow-bakery-500/10 flex items-center justify-center gap-1 ${
+                                  updatingOrderIds.includes(order.id) ? 'opacity-60 cursor-not-allowed' : ''
+                                }`}
+                              >
+                                {updatingOrderIds.includes(order.id) ? (
+                                  <>
+                                    <RotateCw className="w-3 h-3 animate-spin text-white" />
+                                    <span>Saving...</span>
+                                  </>
+                                ) : order.status === 'IN_PRODUCTION' ? (
+                                  <>🔥 Mark Baked</>
+                                ) : order.status === 'BAKED' ? (
+                                  <>✅ Complete</>
+                                ) : (
+                                  <>➔ Next Status</>
+                                )}
+                              </button>
+                            ) : (
+                              <div className="flex-1 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30 text-emerald-600 dark:text-emerald-400 py-2 px-3 rounded-xl text-xs font-extrabold text-center select-none flex items-center justify-center gap-1">
+                                <span>🎉 Collected</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     );
                   })}
                 </div>
-
-                <div className="text-[10px] text-slate-400 italic pt-2">
-                  ℹ️ {t('settingsAutoSaved', { defaultValue: 'Changes are automatically saved and synced instantly across the application.' })}
-                </div>
-              </div>
+              )}
             </div>
+          );
+        })()}
 
-            {/* Lead Time Cut-off hours & Bake Time input card */}
+        {activeTab === 'settings' && (
+          <div className="space-y-6 no-print animate-rise">
             <div className="glass-card rounded-3xl p-6 border border-slate-200 dark:border-slate-800/60 shadow-lg max-w-2xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-md">
               <div className="space-y-6">
-                <div className="flex items-center gap-2 pb-3 border-b border-slate-200 dark:border-slate-800/60">
-                  <span className="text-lg">⚖️</span>
-                  <h3 className="text-sm font-bold text-slate-800 dark:text-white">
-                    {t('orderCutoffSettings', { defaultValue: 'Order Cut-off & Baking Settings' })}
-                  </h3>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Hours input */}
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                      {t('leadTimeHoursInputLabel', { defaultValue: 'Lead Time (Hours)' })}
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        min="1"
-                        max="168"
-                        value={leadTimeHours}
-                        onChange={(e) => {
-                          const val = parseInt(e.target.value, 10);
-                          if (!isNaN(val) && val >= 1) {
-                            saveLeadTimeHours(val);
-                          }
-                        }}
-                        className="p-2.5 w-24 text-xs rounded-xl border dark:bg-slate-950 dark:border-slate-800 bg-white font-semibold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-bakery-500/20 focus:border-bakery-500"
-                      />
-                      <span className="text-xs text-slate-500 font-semibold">
-                        hours ({Math.floor(leadTimeHours / 24)}d {leadTimeHours % 24}h)
-                      </span>
+                
+                {/* Header with icon and Mode segmented toggle */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800/60">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">⚙️</span>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-800 dark:text-white">
+                        {t('scheduleComplexityTitle', { defaultValue: 'Baking Schedule Mode' })}
+                      </h3>
+                      <p className="text-[11px] text-slate-500">
+                        {scheduleMode === 'easy'
+                          ? t('easyModeDesc', { defaultValue: 'Easy Mode simplifies scheduling: date overrides are disabled, and only your standard weekly baking days are in effect.' })
+                          : t('advancedModeDesc', { defaultValue: 'Advanced Mode enables the Seasons Planner: date-bounded seasons and special rosters will override weekly baking days.' })}
+                      </p>
                     </div>
-                    <p className="text-[10px] text-slate-500 leading-relaxed pt-1">
-                      {t('leadTimeHoursDesc', { defaultValue: 'Set how many hours before the bake day a customer can place an order. For example, 60 hours is 2.5 days.' })}
-                    </p>
                   </div>
-
-                  {/* Time of day input */}
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                      {t('bakeStartTimeLabel', { defaultValue: 'Baking Day Start Time' })}
-                    </label>
-                    <input
-                      type="time"
-                      value={bakeTimeOfDay}
-                      onChange={(e) => saveBakeTimeOfDay(e.target.value)}
-                      className="p-2.5 w-36 text-xs rounded-xl border dark:bg-slate-950 dark:border-slate-800 bg-white font-semibold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-bakery-500/20 focus:border-bakery-500"
-                    />
-                    <p className="text-[10px] text-slate-500 leading-relaxed pt-1">
-                      {t('bakeStartTimeDesc', { defaultValue: 'Specify the exact time of day when your baking day officially begins (e.g., 14:00 or 06:00).' })}
-                    </p>
+                  <div className="flex bg-slate-200/60 dark:bg-slate-950/60 p-0.5 rounded-xl border border-slate-300/40 dark:border-slate-800/40 shrink-0 self-start sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={() => saveScheduleModeSetting('easy')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all duration-250 ${
+                        scheduleMode === 'easy'
+                          ? 'bg-white dark:bg-slate-900 text-bakery-500 shadow-sm'
+                          : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                      }`}
+                    >
+                      {t('easyMode', { defaultValue: 'Easy Mode' })}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => saveScheduleModeSetting('advanced')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all duration-250 ${
+                        scheduleMode === 'advanced'
+                          ? 'bg-white dark:bg-slate-900 text-bakery-500 shadow-sm'
+                          : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                      }`}
+                    >
+                      {t('advancedMode', { defaultValue: 'Advanced Mode' })}
+                    </button>
                   </div>
                 </div>
+
+                {/* Mode Content */}
+                {scheduleMode === 'easy' ? (
+                  /* Easy Mode Content */
+                  <div className="space-y-6 animate-rise">
+                    
+                    {/* Weekly Baking Days */}
+                    <div className="space-y-3">
+                      <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <span>📅</span> {t('bakingDaysConfig', { defaultValue: 'Weekly Baking Days' })}
+                      </h4>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        {t('bakingDaysDesc', { defaultValue: 'Select which days of the week you bake. Customers will see upcoming dates for these days during checkout.' })}
+                      </p>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+                        {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day) => {
+                          const isChecked = bakingDays.includes(day);
+                          return (
+                            <label
+                              key={day}
+                              className={`flex items-center gap-2.5 p-3 rounded-2xl border transition cursor-pointer select-none ${
+                                isChecked
+                                  ? 'bg-bakery-500/10 border-bakery-500 text-bakery-600 dark:text-bakery-400 font-extrabold shadow shadow-bakery-500/5'
+                                  : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800/60 text-slate-600 dark:text-slate-400 font-medium hover:bg-slate-50 dark:hover:bg-slate-900/40'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {
+                                  let newDays;
+                                  if (isChecked) {
+                                    newDays = bakingDays.filter((d) => d !== day);
+                                  } else {
+                                    newDays = [...bakingDays, day];
+                                  }
+                                  if (newDays.length === 0) return;
+                                  saveSettings(newDays);
+                                }}
+                                className="w-4 h-4 rounded text-bakery-500 border-slate-300 focus:ring-bakery-500/20"
+                              />
+                              <span className="text-xs capitalize">{t(day.toLowerCase())}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Start Time & Lead Cut-off */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 border-t border-slate-150 dark:border-slate-800/40 pt-5">
+                      {/* Lead Time Cut-off */}
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                          {t('leadTimeHoursInputLabel', { defaultValue: 'Lead Time Cut-off (Hours)' })}
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min="1"
+                            max="168"
+                            value={leadTimeHours}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value, 10);
+                              if (!isNaN(val) && val >= 1) {
+                                saveLeadTimeHours(val);
+                              }
+                            }}
+                            className="p-2.5 w-24 text-xs rounded-xl border dark:bg-slate-950 dark:border-slate-800 bg-white font-semibold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-bakery-500/20 focus:border-bakery-500"
+                          />
+                          <span className="text-xs text-slate-500 font-semibold">
+                            hours ({Math.floor(leadTimeHours / 24)}d {leadTimeHours % 24}h)
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 leading-relaxed pt-1">
+                          {t('leadTimeHoursDesc', { defaultValue: 'Set how many hours before the bake day a customer can place an order. For example, 60 hours is 2.5 days.' })}
+                        </p>
+                      </div>
+
+                      {/* Start Time */}
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                          {t('bakeStartTimeLabel', { defaultValue: 'Baking Day Start Time' })}
+                        </label>
+                        <input
+                          type="time"
+                          value={bakeTimeOfDay}
+                          onChange={(e) => saveBakeTimeOfDay(e.target.value)}
+                          className="p-2.5 w-36 text-xs rounded-xl border dark:bg-slate-950 dark:border-slate-800 bg-white font-semibold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-bakery-500/20 focus:border-bakery-500"
+                        />
+                        <p className="text-[10px] text-slate-500 leading-relaxed pt-1">
+                          {t('bakeStartTimeDesc', { defaultValue: 'Specify the exact time of day when your baking day officially begins (e.g., 14:00 or 06:00).' })}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="text-[10px] text-slate-400 italic border-t border-slate-150 dark:border-slate-800/40 pt-4">
+                      ℹ️ {t('settingsAutoSaved', { defaultValue: 'Changes are automatically saved and synced instantly across the application.' })}
+                    </div>
+
+                  </div>
+                ) : (
+                  /* Advanced Mode Content */
+                  <div className="space-y-6 animate-rise">
+                    
+                    {/* Collapsible Defaults */}
+                    <div className="p-3.5 rounded-2xl bg-slate-50/40 dark:bg-slate-950/20 border border-slate-200/50 dark:border-slate-850/60">
+                      <button
+                        type="button"
+                        onClick={() => setShowFallbackDefaults(!showFallbackDefaults)}
+                        className="w-full flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider select-none text-left"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <span>📋</span> {t('fallbackDefaultsTitle', { defaultValue: 'Fallback Default Weekly Schedule' })}
+                        </span>
+                        <ChevronDown size={14} className={`transform transition-transform duration-200 ${showFallbackDefaults ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {showFallbackDefaults && (
+                        <div className="mt-4 pt-4 border-t border-slate-250/50 dark:border-slate-800/40 space-y-5 animate-rise">
+                          
+                          {/* Default Baking Days */}
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+                              {t('defaultBakingDaysLabel', { defaultValue: 'Default Weekly Baking Days' })}
+                            </label>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                              {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day) => {
+                                const isChecked = bakingDays.includes(day);
+                                return (
+                                  <label
+                                    key={day}
+                                    className={`flex items-center gap-2 p-2.5 rounded-xl border transition cursor-pointer select-none ${
+                                      isChecked
+                                        ? 'bg-bakery-500/10 border-bakery-500 text-bakery-600 dark:text-bakery-400 font-extrabold shadow-sm'
+                                        : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800/60 text-slate-500 dark:text-slate-450 font-medium hover:bg-slate-50 dark:hover:bg-slate-900/40'
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={() => {
+                                        let newDays;
+                                        if (isChecked) {
+                                          newDays = bakingDays.filter((d) => d !== day);
+                                        } else {
+                                          newDays = [...bakingDays, day];
+                                        }
+                                        if (newDays.length === 0) return;
+                                        saveSettings(newDays);
+                                      }}
+                                      className="w-3.5 h-3.5 rounded text-bakery-500 border-slate-300 focus:ring-bakery-500/20"
+                                    />
+                                    <span className="text-[11px] capitalize">{t(day.toLowerCase())}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Default Start Time & Lead Cut-off */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* Lead Cut-off */}
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                                {t('leadTimeHoursInputLabel')}
+                              </label>
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max="168"
+                                  value={leadTimeHours}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value, 10);
+                                    if (!isNaN(val) && val >= 1) {
+                                      saveLeadTimeHours(val);
+                                    }
+                                  }}
+                                  className="p-2 w-20 text-xs rounded-lg border dark:bg-slate-950 dark:border-slate-800 bg-white font-semibold text-slate-800 dark:text-slate-100"
+                                />
+                                <span className="text-[11px] text-slate-500 font-semibold">
+                                  hours ({Math.floor(leadTimeHours / 24)}d {leadTimeHours % 24}h)
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Start Time */}
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                                {t('bakeStartTimeLabel')}
+                              </label>
+                              <input
+                                type="time"
+                                value={bakeTimeOfDay}
+                                onChange={(e) => saveBakeTimeOfDay(e.target.value)}
+                                className="p-2 w-32 text-xs rounded-lg border dark:bg-slate-950 dark:border-slate-800 bg-white font-semibold text-slate-800 dark:text-slate-100"
+                              />
+                            </div>
+                          </div>
+
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Seasons Planner Section */}
+                    <div className="border-t border-slate-200 dark:border-slate-800/60 pt-5 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">🗓️</span>
+                          <h3 className="text-sm font-bold text-slate-800 dark:text-white">
+                            {t('bakingSeasonsPlannerTitle', { defaultValue: 'Baking Seasons & Shift Roster Planner' })}
+                          </h3>
+                        </div>
+                        {!showRosterForm && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRosterName('');
+                              setRosterStartDate('');
+                              setRosterEndDate('');
+                              setRosterDays([]);
+                              setRosterTime('06:00');
+                              setRosterCutoff(leadTimeHours);
+                              setEditingRosterId(null);
+                              setShowRosterForm(true);
+                            }}
+                            className="flex items-center gap-1 text-[11px] font-extrabold px-3 py-1.5 rounded-xl bg-bakery-500 hover:bg-bakery-600 text-white shadow-sm transition-all"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            {t('addSeasonButton', { defaultValue: 'Add Season' })}
+                          </button>
+                        )}
+                      </div>
+
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        {t('bakingSeasonsPlannerDesc', { defaultValue: 'Define date-bounded seasons/rosters to accommodate work shifts or holiday schedules. Dates falling inside an active season will override your standard weekly baking days.' })}
+                      </p>
+
+                      {/* Create/Edit Season Form */}
+                      {showRosterForm && (
+                        <div className="p-4 rounded-2xl bg-slate-50/50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800/60 space-y-4 animate-rise">
+                          <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                            {editingRosterId ? t('editSeasonTitle', { defaultValue: 'Edit Baking Season Override' }) : t('createSeasonTitle', { defaultValue: 'Create Baking Season Override' })}
+                          </h4>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {/* Name */}
+                            <div className="space-y-1 sm:col-span-2">
+                              <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                                {t('seasonNameLabel', { defaultValue: 'Season / Roster Name' })}
+                              </label>
+                              <input
+                                type="text"
+                                placeholder={t('seasonNamePlaceholder', { defaultValue: 'e.g. Summer Morning Shift, Holidays' })}
+                                value={rosterName}
+                                onChange={(e) => setRosterName(e.target.value)}
+                                className="w-full p-2.5 text-xs rounded-xl border dark:bg-slate-950 dark:border-slate-800 bg-white font-medium text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-bakery-500/20 focus:border-bakery-500"
+                              />
+                            </div>
+
+                            {/* Start Date */}
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                                {t('startDateLabel', { defaultValue: 'Start Date' })}
+                              </label>
+                              <input
+                                type="date"
+                                value={rosterStartDate}
+                                onChange={(e) => setRosterStartDate(e.target.value)}
+                                className="w-full p-2.5 text-xs rounded-xl border dark:bg-slate-950 dark:border-slate-800 bg-white font-medium text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-bakery-500/20 focus:border-bakery-500"
+                              />
+                            </div>
+
+                            {/* End Date */}
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                                {t('endDateLabel', { defaultValue: 'End Date' })}
+                              </label>
+                              <input
+                                type="date"
+                                value={rosterEndDate}
+                                onChange={(e) => setRosterEndDate(e.target.value)}
+                                className="w-full p-2.5 text-xs rounded-xl border dark:bg-slate-950 dark:border-slate-800 bg-white font-medium text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-bakery-500/20 focus:border-bakery-500"
+                              />
+                            </div>
+
+                            {/* Bake Start Time */}
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+                                {t('seasonBakeTimeLabel', { defaultValue: 'Baking Day Start Time for this Season' })}
+                              </label>
+                              <input
+                                type="time"
+                                value={rosterTime}
+                                onChange={(e) => setRosterTime(e.target.value)}
+                                className="p-2.5 w-full text-xs rounded-xl border dark:bg-slate-950 dark:border-slate-800 bg-white font-semibold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-bakery-500/20 focus:border-bakery-500"
+                              />
+                            </div>
+
+                            {/* Order Cutoff hours */}
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+                                {t('seasonCutoffLabel', { defaultValue: 'Order Cut-off for this Season (Hours)' })}
+                              </label>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max="168"
+                                  value={rosterCutoff}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val === "") {
+                                      setRosterCutoff("");
+                                    } else {
+                                      const parsed = parseInt(val, 10);
+                                      if (!isNaN(parsed) && parsed >= 1) {
+                                        setRosterCutoff(parsed);
+                                      }
+                                    }
+                                  }}
+                                  className="p-2.5 w-24 text-xs rounded-xl border dark:bg-slate-950 dark:border-slate-800 bg-white font-semibold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-bakery-500/20 focus:border-bakery-500"
+                                />
+                                <span className="text-xs text-slate-500 font-semibold">hours</span>
+                              </div>
+                            </div>
+
+                            {/* Days selection */}
+                            <div className="space-y-2 sm:col-span-2">
+                              <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+                                {t('seasonBakingDaysLabel', { defaultValue: 'Active Overriding Baking Days' })}
+                              </label>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                                {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day) => {
+                                  const isSelected = rosterDays.includes(day);
+                                  return (
+                                    <button
+                                      key={day}
+                                      type="button"
+                                      onClick={() => {
+                                        if (isSelected) {
+                                          setRosterDays(rosterDays.filter(d => d !== day));
+                                        } else {
+                                          setRosterDays([...rosterDays, day]);
+                                        }
+                                      }}
+                                      className={`p-2 rounded-xl text-xs font-semibold border transition-all text-center select-none ${
+                                        isSelected
+                                          ? 'bg-bakery-500/15 border-bakery-500 text-bakery-600 dark:text-bakery-400 font-extrabold shadow shadow-bakery-500/5'
+                                          : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/40'
+                                      }`}
+                                    >
+                                      {t(day.toLowerCase(), { defaultValue: day })}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-end gap-3 pt-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setRosterName('');
+                                setRosterStartDate('');
+                                setRosterEndDate('');
+                                setRosterDays([]);
+                                setRosterTime('06:00');
+                                setRosterCutoff(leadTimeHours);
+                                setEditingRosterId(null);
+                                setShowRosterForm(false);
+                              }}
+                              className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-all"
+                            >
+                              {t('cancel', { defaultValue: 'Cancel' })}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleCreateRoster}
+                              className="px-4 py-2 rounded-xl bg-bakery-500 hover:bg-bakery-600 text-white text-xs font-bold shadow-sm transition-all"
+                            >
+                              {t('saveRosterButton', { defaultValue: 'Save Roster' })}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Rosters List */}
+                      <div className="space-y-3">
+                        <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                          {t('activeSeasonsTitle', { defaultValue: 'Configured Seasons' })}
+                        </h4>
+
+                        {bakingSeasons.length === 0 ? (
+                          <div className="p-6 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800/60 text-center bg-slate-50/20 dark:bg-slate-950/10">
+                            <span className="text-2xl block mb-2">🌴</span>
+                            <p className="text-xs text-slate-400 font-medium">
+                              {t('noSeasonsPlaceholder', { defaultValue: 'No active seasonal overrides configured. Your standard weekly baking days are in effect for all weeks.' })}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 gap-3">
+                            {bakingSeasons.map((season) => (
+                              <div
+                                key={season.id}
+                                className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800/60 bg-white/40 dark:bg-slate-950/30 flex items-start justify-between gap-4 shadow-sm animate-rise"
+                              >
+                                <div className="space-y-2 flex-1 min-w-0">
+                                  <div className="flex items-center flex-wrap gap-2">
+                                    <h5 className="text-xs font-extrabold text-slate-800 dark:text-slate-100 truncate max-w-[200px]">
+                                      {season.name}
+                                    </h5>
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-bakery-500/10 text-bakery-600 dark:text-bakery-400">
+                                      <Clock className="w-3 h-3" />
+                                      {season.bakeTime || '06:00'}
+                                    </span>
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                                      <span>⚖️</span>
+                                      <span>{season.cutoffHours !== undefined && season.cutoffHours !== null ? `${season.cutoffHours}h cutoff` : `${leadTimeHours}h cutoff`}</span>
+                                    </span>
+                                  </div>
+
+                                  <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 flex items-center gap-1">
+                                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                                    {season.startDate} &mdash; {season.endDate}
+                                  </p>
+
+                                  <div className="flex flex-wrap gap-1.5 pt-1">
+                                    {season.bakingDays && season.bakingDays.map((day) => (
+                                      <span
+                                        key={day}
+                                        className="px-2 py-0.5 text-[9px] font-bold bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 rounded-lg capitalize border border-slate-200/40 dark:border-slate-800/40"
+                                      >
+                                        {t(day.toLowerCase(), { defaultValue: day })}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingRosterId(season.id);
+                                      setRosterName(season.name);
+                                      setRosterStartDate(season.startDate);
+                                      setRosterEndDate(season.endDate);
+                                      setRosterDays(season.bakingDays || []);
+                                      setRosterTime(season.bakeTime || '06:00');
+                                      setRosterCutoff(season.cutoffHours !== undefined && season.cutoffHours !== null ? season.cutoffHours : leadTimeHours);
+                                      setShowRosterForm(true);
+                                    }}
+                                    className="p-2 rounded-xl text-slate-400 hover:text-bakery-500 dark:hover:text-bakery-400 hover:bg-bakery-500/5 transition-all border border-transparent hover:border-bakery-500/10"
+                                    title={t('edit', { defaultValue: 'Edit' })}
+                                  >
+                                    <Pencil className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteRoster(season.id)}
+                                    className="p-2 rounded-xl text-slate-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-500/5 transition-all border border-transparent hover:border-red-500/10"
+                                    title={t('delete', { defaultValue: 'Delete' })}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                  </div>
+                )}
+            {scheduleMode === 'easy' && (
+              <div className="p-8 text-center rounded-3xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/10 dark:bg-slate-900/10 mt-6">
+                <span className="text-3xl block mb-2">🏝️</span>
+                <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                  {t('easyModeActiveTitle', { defaultValue: 'Seasonal Overrides Disabled' })}
+                </h4>
+                <p className="text-xs text-slate-400 font-medium max-w-md mx-auto leading-relaxed">
+                  {t('easyModeActiveDesc', { defaultValue: 'You are currently in Easy Mode. Your microbakery schedule relies entirely on standard weekly baking days. Switch to Advanced Mode to plan date-bound seasons and custom shift rosters.' })}
+                </p>
               </div>
-            </div>
+            )}
+          </div>
+        </div>
 
             {/* Flour types configuration */}
             <div className="glass-card rounded-3xl p-6 border border-slate-200 dark:border-slate-800/60 shadow-lg max-w-2xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-md">
@@ -5905,9 +7647,10 @@ export default function AdminDashboard() {
                           <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1 text-center">Seed</label>
                           <input
                             type="number"
-                            min="1"
+                            step="any"
+                            min="0.1"
                             value={tempSeedParts}
-                            onChange={(e) => setTempSeedParts(parseInt(e.target.value) || 1)}
+                            onChange={(e) => setTempSeedParts(e.target.value)}
                             className="w-full text-xs p-2.5 border rounded-xl dark:bg-slate-900 bg-white text-center font-bold"
                           />
                         </div>
@@ -5915,9 +7658,10 @@ export default function AdminDashboard() {
                           <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1 text-center">Flour</label>
                           <input
                             type="number"
-                            min="1"
+                            step="any"
+                            min="0.1"
                             value={tempFlourParts}
-                            onChange={(e) => setTempFlourParts(parseInt(e.target.value) || 1)}
+                            onChange={(e) => setTempFlourParts(e.target.value)}
                             className="w-full text-xs p-2.5 border rounded-xl dark:bg-slate-900 bg-white text-center font-bold"
                           />
                         </div>
@@ -5925,9 +7669,10 @@ export default function AdminDashboard() {
                           <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1 text-center">Water</label>
                           <input
                             type="number"
-                            min="1"
+                            step="any"
+                            min="0.1"
                             value={tempWaterParts}
-                            onChange={(e) => setTempWaterParts(parseInt(e.target.value) || 1)}
+                            onChange={(e) => setTempWaterParts(e.target.value)}
                             className="w-full text-xs p-2.5 border rounded-xl dark:bg-slate-900 bg-white text-center font-bold"
                           />
                         </div>
@@ -6065,13 +7810,17 @@ export default function AdminDashboard() {
                           }
 
                           let updated;
+                          const finalSeed = tempSeedParts === "" ? 1.0 : parseFloat(tempSeedParts);
+                          const finalFlour = tempFlourParts === "" ? 2.0 : parseFloat(tempFlourParts);
+                          const finalWater = tempWaterParts === "" ? 2.0 : parseFloat(tempWaterParts);
+
                           if (editingStarterId === 'new') {
                             const newStarter = {
                               id: `starter-${Date.now()}`,
                               name: tempStarterName.trim(),
-                              seedParts: tempSeedParts,
-                              flourParts: tempFlourParts,
-                              waterParts: tempWaterParts,
+                              seedParts: finalSeed,
+                              flourParts: finalFlour,
+                              waterParts: finalWater,
                               floursBreakdown: tempStarterFlours,
                               feedingMethod: tempFeedingMethod
                             };
@@ -6082,9 +7831,9 @@ export default function AdminDashboard() {
                                 return {
                                   ...s,
                                   name: tempStarterName.trim(),
-                                  seedParts: tempSeedParts,
-                                  flourParts: tempFlourParts,
-                                  waterParts: tempWaterParts,
+                                  seedParts: finalSeed,
+                                  flourParts: finalFlour,
+                                  waterParts: finalWater,
                                   floursBreakdown: tempStarterFlours,
                                   feedingMethod: tempFeedingMethod
                                 };
@@ -6251,10 +8000,42 @@ export default function AdminDashboard() {
                     const currentVal = pantryStock[ing] !== undefined ? pantryStock[ing] : 0.0;
                     const tempVal = tempPantryStock[ing] !== undefined ? tempPantryStock[ing] : currentVal;
 
+                    const isUnderStocked = (() => {
+                      const lower = ing.toLowerCase();
+                      if (lower.includes('salt')) {
+                        return currentVal < 1.0;
+                      }
+                      const isFlour = lower.includes('flour') ||
+                        lower.includes('wheat') ||
+                        lower.includes('rye') ||
+                        lower.includes('buckwheat') ||
+                        lower.includes('heljda') ||
+                        lower.includes('manitoba') ||
+                        lower.includes('semolina') ||
+                        lower.includes('spelt') ||
+                        lower.includes('grain');
+                      if (isFlour) {
+                        return currentVal < 5.0;
+                      }
+                      return currentVal < 1.5;
+                    })();
+
                     return (
-                      <div key={ing} className="flex justify-between items-center p-3 rounded-2xl bg-white dark:bg-slate-900/30 border border-slate-150 dark:border-slate-800/60 shadow-sm">
-                        <span className="text-xs font-extrabold text-slate-700 dark:text-slate-300">
+                      <div
+                        key={ing}
+                        className={`flex justify-between items-center p-3 rounded-2xl bg-white dark:bg-slate-900/30 border ${
+                          isUnderStocked && !editingInventory
+                            ? 'border-amber-400 dark:border-amber-500/50 shadow-sm shadow-amber-500/5'
+                            : 'border-slate-150 dark:border-slate-800/60 shadow-sm'
+                        } transition-all duration-300`}
+                      >
+                        <span className="text-xs font-extrabold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 flex-wrap">
                           🌾 {ing}
+                          {isUnderStocked && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 animate-pulse">
+                              ⚠️ Low Stock
+                            </span>
+                          )}
                         </span>
                         {!editingInventory ? (
                           <span className="text-xs font-mono font-extrabold text-slate-800 dark:text-slate-100 font-sans">
@@ -6278,10 +8059,8 @@ export default function AdminDashboard() {
                               min="0"
                               value={tempVal}
                               onChange={(e) => {
-                                const val = parseFloat(e.target.value);
-                                if (!isNaN(val) && val >= 0) {
-                                  setTempPantryStock({ ...tempPantryStock, [ing]: val });
-                                }
+                                const rawVal = e.target.value;
+                                setTempPantryStock({ ...tempPantryStock, [ing]: rawVal });
                               }}
                               className="p-1 w-16 text-center text-xs rounded-lg border dark:bg-slate-950 dark:border-slate-800 bg-white font-mono font-bold text-slate-800 dark:text-slate-100"
                             />
@@ -6366,10 +8145,8 @@ export default function AdminDashboard() {
                                 min="0"
                                 value={tempVal}
                                 onChange={(e) => {
-                                  const val = parseFloat(e.target.value);
-                                  if (!isNaN(val) && val >= 0) {
-                                    setTempIngredientCosts({ ...tempIngredientCosts, [ing]: val });
-                                  }
+                                  const raw = e.target.value;
+                                  setTempIngredientCosts({ ...tempIngredientCosts, [ing]: raw });
                                 }}
                                 className="p-1 w-20 text-center text-xs rounded-lg border dark:bg-slate-950 dark:border-slate-800 bg-white font-mono font-bold text-slate-800 dark:text-slate-100"
                               />

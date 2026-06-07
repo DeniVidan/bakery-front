@@ -18,7 +18,7 @@ import {
   ChevronDown
 } from 'lucide-react';
 
-const generateUpcomingDates = (bakingDays = ['Tuesday', 'Saturday'], count = 6, leadTimeHours = 72, bakeTimeOfDay = '06:00') => {
+const generateUpcomingDates = (bakingDays = ['Tuesday', 'Saturday'], count = 6, leadTimeHours = 72, bakeTimeOfDay = '06:00', seasons = []) => {
   const result = [];
   const daysMap = {
     'Sunday': 0,
@@ -30,27 +30,48 @@ const generateUpcomingDates = (bakingDays = ['Tuesday', 'Saturday'], count = 6, 
     'Saturday': 6
   };
   
-  const targetDays = bakingDays.map(d => daysMap[d]).filter(d => d !== undefined);
-  if (targetDays.length === 0) {
-    targetDays.push(2, 6); // default Tuesday and Saturday
-  }
-
-  let startHours = 6;
-  let startMinutes = 0;
-  if (bakeTimeOfDay && bakeTimeOfDay.includes(':')) {
-    const parts = bakeTimeOfDay.split(':');
-    startHours = parseInt(parts[0], 10) || 6;
-    startMinutes = parseInt(parts[1], 10) || 0;
-  }
-
   let current = new Date();
 
   for (let i = 0; i < 30 && result.length < count; i++) {
+    // Format date as YYYY-MM-DD
+    const yearStr = current.getFullYear();
+    const monthStr = String(current.getMonth() + 1).padStart(2, '0');
+    const dateStr = String(current.getDate()).padStart(2, '0');
+    const isoDateStr = `${yearStr}-${monthStr}-${dateStr}`;
+
+    // Find if there is an active season covering this date
+    let activeSeason = null;
+    if (seasons && seasons.length > 0) {
+      activeSeason = seasons.find(s => s.startDate <= isoDateStr && isoDateStr <= s.endDate);
+    }
+
+    let activeBakingDays = bakingDays;
+    let activeBakeTime = bakeTimeOfDay;
+    let activeCutoff = leadTimeHours;
+
+    if (activeSeason) {
+      activeBakingDays = activeSeason.bakingDays || [];
+      activeBakeTime = activeSeason.bakeTime || bakeTimeOfDay;
+      if (activeSeason.cutoffHours !== undefined && activeSeason.cutoffHours !== null && activeSeason.cutoffHours !== '') {
+        activeCutoff = parseInt(activeSeason.cutoffHours, 10);
+      }
+    }
+
+    const targetDays = activeBakingDays.map(d => daysMap[d]).filter(d => d !== undefined);
     const dayOfWeek = current.getDay();
+
     if (targetDays.includes(dayOfWeek)) {
+      let startHours = 6;
+      let startMinutes = 0;
+      if (activeBakeTime && activeBakeTime.includes(':')) {
+        const parts = activeBakeTime.split(':');
+        startHours = parseInt(parts[0], 10) || 6;
+        startMinutes = parseInt(parts[1], 10) || 0;
+      }
+
       const bakeStart = new Date(current.getFullYear(), current.getMonth(), current.getDate(), startHours, startMinutes, 0, 0);
-      const deadline = new Date(bakeStart.getTime() - leadTimeHours * 60 * 60 * 1000);
-      
+      const deadline = new Date(bakeStart.getTime() - activeCutoff * 60 * 60 * 1000);
+
       if (new Date() < deadline) {
         result.push(new Date(bakeStart));
       }
@@ -108,6 +129,7 @@ export default function CustomerDashboard() {
   const [profileName, setProfileName] = useState('');
   const [selectedSlot, setSelectedSlot] = useState('');
   const [bakingDays, setBakingDays] = useState(['Tuesday', 'Saturday']);
+  const [bakingSeasons, setBakingSeasons] = useState([]);
   const [upcomingDates, setUpcomingDates] = useState([]);
   const [saveAsStandingOrder, setSaveAsStandingOrder] = useState(false);
   const [leadTimeHours, setLeadTimeHours] = useState(72);
@@ -213,24 +235,39 @@ export default function CustomerDashboard() {
         const bakeTime = data.settings && data.settings.bakeTimeOfDay ? data.settings.bakeTimeOfDay : '06:00';
         setLeadTimeHours(hours);
         setBakeTimeOfDay(bakeTime);
+
+        let mode = 'advanced';
+        if (data.settings && data.settings.scheduleMode) {
+          mode = data.settings.scheduleMode;
+        }
+
+        let activeSeasons = [];
+        if (mode !== 'easy' && data.settings && data.settings.bakingSeasons) {
+          try {
+            activeSeasons = JSON.parse(data.settings.bakingSeasons);
+            setBakingSeasons(activeSeasons);
+          } catch (e) {
+            console.error('Error parsing bakingSeasons setting:', e);
+          }
+        }
         
         if (data.settings && data.settings.bakingDays) {
           const parsed = JSON.parse(data.settings.bakingDays);
           setBakingDays(parsed);
-          const dates = generateUpcomingDates(parsed, 6, hours, bakeTime);
+          const dates = generateUpcomingDates(parsed, 6, hours, bakeTime, activeSeasons);
           setUpcomingDates(dates);
           if (dates.length > 0) {
             setSelectedSlot(dates[0].toISOString().split('T')[0]);
           }
         } else {
-          const dates = generateUpcomingDates(['Tuesday', 'Saturday'], 6, hours, bakeTime);
+          const dates = generateUpcomingDates(['Tuesday', 'Saturday'], 6, hours, bakeTime, activeSeasons);
           setUpcomingDates(dates);
           if (dates.length > 0) {
             setSelectedSlot(dates[0].toISOString().split('T')[0]);
           }
         }
       } else {
-        const dates = generateUpcomingDates(['Tuesday', 'Saturday'], 6, 72, '06:00');
+        const dates = generateUpcomingDates(['Tuesday', 'Saturday'], 6, 72, '06:00', []);
         setUpcomingDates(dates);
         if (dates.length > 0) {
           setSelectedSlot(dates[0].toISOString().split('T')[0]);
@@ -238,7 +275,7 @@ export default function CustomerDashboard() {
       }
     } catch (err) {
       console.error('Error fetching settings:', err);
-      const dates = generateUpcomingDates(['Tuesday', 'Saturday'], 6, 72, '06:00');
+      const dates = generateUpcomingDates(['Tuesday', 'Saturday'], 6, 72, '06:00', []);
       setUpcomingDates(dates);
       if (dates.length > 0) {
         setSelectedSlot(dates[0].toISOString().split('T')[0]);
@@ -467,7 +504,7 @@ export default function CustomerDashboard() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-8">
+      <main className={`max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-8 ${cart.length > 0 ? 'pb-32 lg:pb-8' : ''}`}>
         {/* Navigation tabs */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8 border-b border-slate-200 dark:border-slate-800 pb-3">
           <div className="flex flex-wrap gap-1.5 sm:gap-2">
@@ -664,14 +701,14 @@ export default function CustomerDashboard() {
                                 <div className="flex items-center bg-slate-200 dark:bg-slate-800 rounded-lg p-0.5">
                                   <button 
                                     onClick={() => updateQty(item.variant.id, -1)}
-                                    className="w-4.5 h-4.5 sm:w-5 sm:h-5 flex items-center justify-center font-bold text-xs hover:bg-white dark:hover:bg-slate-700 rounded transition"
+                                    className="w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center font-bold text-xs hover:bg-white dark:hover:bg-slate-700 rounded transition"
                                   >
                                     -
                                   </button>
                                   <span className="w-5 sm:w-6 text-center font-bold text-xs">{item.quantity}</span>
                                   <button 
                                     onClick={() => updateQty(item.variant.id, 1)}
-                                    className="w-4.5 h-4.5 sm:w-5 sm:h-5 flex items-center justify-center font-bold text-xs hover:bg-white dark:hover:bg-slate-700 rounded transition"
+                                    className="w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center font-bold text-xs hover:bg-white dark:hover:bg-slate-700 rounded transition"
                                   >
                                     +
                                   </button>
@@ -1039,7 +1076,7 @@ export default function CustomerDashboard() {
                           <span className="text-xs font-bold select-none">{index + 1}</span>
                         )}
                         {isStamped && (
-                          <span className="absolute -top-1 -right-1 bg-bakery-500 text-white rounded-full text-[8px] w-4.5 h-4.5 flex items-center justify-center font-bold border border-white dark:border-slate-900">✓</span>
+                          <span className="absolute -top-1 -right-1 bg-bakery-500 text-white rounded-full text-[8px] w-4 h-4 flex items-center justify-center font-bold border border-white dark:border-slate-900">✓</span>
                         )}
                       </div>
                     );
@@ -1249,7 +1286,7 @@ export default function CustomerDashboard() {
           {/* Backdrop Blur Overlay when cart is expanded */}
           {isCartExpanded && (
             <div 
-              className="lg:hidden fixed inset-0 bg-black/60 backdrop-blur-xs z-50 transition-opacity duration-300 pointer-events-auto"
+              className="lg:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 animate-fade-in pointer-events-auto"
               onClick={() => setIsCartExpanded(false)}
             />
           )}
@@ -1257,7 +1294,7 @@ export default function CustomerDashboard() {
           {/* Bottom Sheet Modal */}
           <div 
             className={`lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-tr from-slate-50 via-white to-amber-50/20 dark:from-slate-950 dark:via-slate-900 dark:to-bakery-950/20 border-t border-slate-200 dark:border-slate-800 rounded-t-[2.5rem] shadow-2xl transition-transform duration-300 transform ${
-              isCartExpanded ? 'translate-y-0 pointer-events-auto animate-rise' : 'translate-y-full pointer-events-none'
+              isCartExpanded ? 'translate-y-0 pointer-events-auto animate-slide-up' : 'translate-y-full pointer-events-none'
             }`}
             style={{ maxHeight: '92vh' }}
           >
@@ -1484,7 +1521,7 @@ export default function CustomerDashboard() {
                   <div className="flex items-center gap-3">
                     <div className="relative bg-white/10 p-2 rounded-xl border border-white/20">
                       <ShoppingBag size={18} className="animate-pulse text-amber-100" />
-                      <span className={`absolute -top-1.5 -right-1.5 bg-amber-500 text-white text-[10px] font-extrabold w-4.5 h-4.5 rounded-full flex items-center justify-center border border-white dark:border-slate-900 shadow-sm ${badgeAnimate ? 'animate-badge-pop' : ''}`}>
+                      <span className={`absolute -top-1.5 -right-1.5 bg-amber-500 text-white text-[10px] font-extrabold min-w-[1.25rem] h-5 px-1 rounded-full flex items-center justify-center border border-white dark:border-slate-900 shadow-sm ${badgeAnimate ? 'animate-badge-pop' : ''}`}>
                         {totalQty}
                       </span>
                     </div>
