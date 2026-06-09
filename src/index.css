@@ -204,3 +204,14 @@
 .animate-slide-up {
   animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+/* Toast slide-in from the right with spring effect */
+@keyframes toastSlideIn {
+  0% { transform: translateX(120%) scale(0.9); opacity: 0; }
+  70% { transform: translateX(-10px) scale(1.02); opacity: 0.95; }
+  100% { transform: translateX(0) scale(1); opacity: 1; }
+}
+
+.animate-toast-slide-in {
+  animation: toastSlideIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
