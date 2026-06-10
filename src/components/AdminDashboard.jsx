@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import OverviewTab from './AdminDashboard/OverviewTab';
 import SettingsTab from './AdminDashboard/SettingsTab';
+import OrdersTab from './AdminDashboard/OrdersTab';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { 
@@ -161,7 +162,6 @@ export default function AdminDashboard() {
   const [rosterCutoff, setRosterCutoff] = useState(72);
   const [updatingOrderIds, setUpdatingOrderIds] = useState([]);
   const [upcomingDates, setUpcomingDates] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
   const [rescheduleOrder, setRescheduleOrder] = useState(null);
   const [rescheduleDate, setRescheduleDate] = useState('');
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
@@ -406,16 +406,6 @@ export default function AdminDashboard() {
       price: v.price
     }))
   );
-
-  const filteredOrders = orders.filter((o) => {
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    const name = o.user?.name?.toLowerCase() || '';
-    const email = o.user?.email?.toLowerCase() || '';
-    const phone = o.user?.phone || '';
-    const id = o.id?.toLowerCase() || '';
-    return name.includes(query) || email.includes(query) || phone.includes(query) || id.includes(query);
-  });
 
   const [editingProduct, setEditingProduct] = useState(null);
   const [sessionFlours, setSessionFlours] = useState([]);
@@ -3896,296 +3886,33 @@ export default function AdminDashboard() {
 
         {/* 5. BAKING ORDERS LIST & BATCH BUILDER */}
         {activeTab === 'orders' && (
-          <div className="space-y-6 no-print">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-extrabold text-slate-800 dark:text-white">{t('customerBakingOrders')}</h2>
-                <p className="text-xs text-slate-500">{t('customerBakingOrdersDesc')}</p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="relative w-full sm:w-64">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder={t('searchPlaceholder', { defaultValue: 'Search orders...' })}
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full text-[11px] pl-8 pr-3 py-2 border rounded-xl bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800/80 font-bold text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-bakery-500 transition"
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowInternalOrderModal(true)}
-                  className="px-4 py-2.5 bg-gradient-to-r from-bakery-500 to-bakery-600 hover:from-bakery-600 hover:to-bakery-700 text-white font-extrabold rounded-xl shadow-md flex items-center gap-1.5 text-xs transition duration-300"
-                >
-                  <Plus size={16} />
-                  {t('addInternalOrderBtn')}
-                </button>
-              </div>
-
-              {/* Batch generator panel */}
-              {selectedOrdersForBatch.length > 0 && (
-                <div className="p-5 rounded-3xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center gap-5 text-xs animate-rise shadow-xl shadow-amber-500/5 max-w-2xl">
-                  <div className="space-y-3 w-full">
-                    <span className="font-extrabold uppercase tracking-wider text-amber-800 dark:text-amber-400 block">
-                      🛠️ {t('batchCompiler', { defaultValue: 'Production Batch Compiler' })} ({selectedOrdersForBatch.length} {t('selected', { defaultValue: 'selected' })})
-                    </span>
-                    
-                    {/* Pill Selector for Action Type */}
-                    <div className="flex gap-2 p-1 bg-slate-900/10 dark:bg-slate-900/40 rounded-xl max-w-sm">
-                      <button
-                        type="button"
-                        onClick={() => setBatchActionType('new')}
-                        className={`flex-1 py-1.5 px-3 rounded-lg font-bold text-[10px] uppercase tracking-wide transition duration-200 ${
-                          batchActionType === 'new'
-                            ? 'bg-amber-500 text-white shadow-sm shadow-amber-500/20'
-                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-                        }`}
-                      >
-                        🆕 {t('createNewBatch', { defaultValue: 'New Batch' })}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setBatchActionType('existing')}
-                        className={`flex-1 py-1.5 px-3 rounded-lg font-bold text-[10px] uppercase tracking-wide transition duration-200 ${
-                          batchActionType === 'existing'
-                            ? 'bg-amber-500 text-white shadow-sm shadow-amber-500/20'
-                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-                        }`}
-                      >
-                        📥 {t('addToExistingBatch', { defaultValue: 'Add to Existing' })}
-                      </button>
-                    </div>
-
-                    {batchActionType === 'new' ? (
-                      <div className="space-y-1 animate-fade">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                          📅 {t('chooseBakeDate', { defaultValue: 'Bake Date' })}
-                        </label>
-                        <input
-                          type="date"
-                          value={bakeDate}
-                          onChange={(e) => setBakeDate(e.target.value)}
-                          className="text-[11px] p-2 border border-slate-200 dark:border-slate-800/80 rounded-xl bg-white dark:bg-slate-950 font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-amber-500/20"
-                        />
-                      </div>
-                    ) : (
-                      <div className="space-y-1 animate-fade w-full">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                          ⚡ {t('chooseExistingBatch', { defaultValue: 'Select Draft Production Run' })}
-                        </label>
-                        {batches.filter(b => b.status === 'DRAFT').length === 0 ? (
-                          <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium italic block mt-1">
-                            {t('noDraftBatches', { defaultValue: 'No active Draft production runs available. Create a new batch first.' })}
-                          </span>
-                        ) : (
-                          <select
-                            value={selectedExistingBatchId}
-                            onChange={(e) => setSelectedExistingBatchId(e.target.value)}
-                            className="text-[11px] p-2 border border-slate-200 dark:border-slate-800/80 rounded-xl bg-white dark:bg-slate-950 font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-amber-500/20 w-full sm:max-w-xs"
-                          >
-                            <option value="">-- {t('selectBatchOption', { defaultValue: 'Select a Draft Run' })} --</option>
-                            {batches
-                              .filter(b => b.status === 'DRAFT')
-                              .map(b => {
-                                const formattedDate = new Date(b.date).toLocaleDateString(undefined, {
-                                  weekday: 'short',
-                                  month: 'short',
-                                  day: 'numeric'
-                                });
-                                const ordersCount = b.orders?.length || 0;
-                                return (
-                                  <option key={b.id} value={b.id}>
-                                    Run on {formattedDate} ({ordersCount} {ordersCount === 1 ? 'order' : 'orders'})
-                                  </option>
-                                );
-                              })}
-                          </select>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    onClick={generateBatch}
-                    disabled={batchActionType === 'existing' && !selectedExistingBatchId}
-                    className={`px-5 py-3 text-white font-extrabold rounded-2xl shadow-lg shadow-amber-500/10 transition self-end sm:self-center shrink-0 text-[11px] uppercase tracking-wider flex items-center gap-1 hover:scale-[1.03] ${
-                      batchActionType === 'existing' && !selectedExistingBatchId
-                        ? 'bg-amber-500/40 cursor-not-allowed'
-                        : 'bg-amber-500 hover:bg-amber-600'
-                    }`}
-                  >
-                    🚀 {batchActionType === 'existing' ? t('compileToExisting', { defaultValue: 'Add to Batch' }) : t('compileLockedBatch')}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="glass-panel rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-lg">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-800 text-white font-bold uppercase tracking-wider text-[10px]">
-                      <th className="p-4 w-12 text-center">{t('batchCheckbox')}</th>
-                      <th className="p-4">{t('orderIdDate')}</th>
-                      <th className="p-4">{t('customer')}</th>
-                      <th className="p-4">{t('itemsBreakdown')}</th>
-                      <th className="p-4">{t('ovenStatus')}</th>
-                      <th className="p-4 text-right">{t('ovenControls')}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {filteredOrders.length === 0 ? (
-                      <tr>
-                        <td colSpan="6" className="p-8 text-center text-slate-400 italic">
-                          {t('noMatchingOrders', { defaultValue: 'No matching orders found' })}
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredOrders.map((o) => {
-                        const isSelected = selectedOrdersForBatch.includes(o.id);
-                        return (
-                          <tr key={o.id} className={`hover:bg-slate-200/40 dark:hover:bg-slate-900/20 transition ${updatingOrderIds.includes(o.id) ? 'animate-pulse bg-amber-500/5 pointer-events-none' : ''}`}>
-                          <td className="p-4 text-center">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              disabled={o.batchId !== null}
-                              onChange={() => toggleOrderSelection(o.id)}
-                              className="w-4 h-4 rounded text-bakery-500 border-slate-300"
-                            />
-                          </td>
-                          <td className="p-4">
-                            <span className="font-bold text-slate-800 dark:text-slate-100">#{o.id.slice(0, 8).toUpperCase()}</span>
-                            <span className="text-[10px] text-slate-500 block mt-1">{new Date(o.createdAt).toLocaleDateString()}</span>
-                            <div className="flex flex-col gap-1 mt-1.5">
-                              {o.pickupSlot && (
-                                <div className="flex items-center gap-1.5 self-start">
-                                  <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-0.5 bg-amber-500/5 px-1.5 py-0.5 rounded">
-                                    🕒 {formatSlotLabel(o.pickupSlot)}
-                                  </span>
-                                  <button
-                                    onClick={() => {
-                                      setRescheduleOrder(o);
-                                      setRescheduleDate(o.pickupSlot);
-                                      setShowRescheduleModal(true);
-                                    }}
-                                    className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-bakery-500 transition"
-                                    title={t('changeBakingDay', { defaultValue: 'Change Baking Day' })}
-                                  >
-                                    <Settings size={10} />
-                                  </button>
-                                </div>
-                              )}
-                              {o.batchId ? (
-                                <div className="flex items-center gap-1.5 self-start flex-wrap">
-                                  <span className="text-[8px] uppercase tracking-wider font-extrabold bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">
-                                    {t('batched')}
-                                  </span>
-                                  <button
-                                    onClick={() => handleUnbatchOrder(o.id)}
-                                    className="text-[9px] font-extrabold text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 bg-red-500/5 hover:bg-red-500/10 px-1.5 py-0.5 rounded transition flex items-center gap-0.5 border border-red-500/10"
-                                    title={t('unbatchOrder', { defaultValue: 'Remove from production run' })}
-                                  >
-                                    ✕ {t('unbatch', { defaultValue: 'Unbatch' })}
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteOrder(o.id)}
-                                    className="text-[9px] font-extrabold text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 bg-rose-500/5 hover:bg-rose-500/10 px-1.5 py-0.5 rounded transition flex items-center gap-0.5 border border-rose-500/10"
-                                    title={t('cancelOrder', { defaultValue: 'Cancel / permanently delete order' })}
-                                  >
-                                    ✕ {t('cancel', { defaultValue: 'Cancel' })}
-                                  </button>
-                                </div>
-                              ) : (
-                                <button
-                                  onClick={() => handleDeleteOrder(o.id)}
-                                  className="text-[9px] font-extrabold text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 bg-red-500/5 hover:bg-red-500/10 px-1.5 py-0.5 rounded transition flex items-center gap-0.5 border border-red-500/10 self-start mt-1"
-                                  title={t('deleteOrder', { defaultValue: 'Permanently delete order' })}
-                                >
-                                  ✕ {t('delete', { defaultValue: 'Delete' })}
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                          <td className="p-4">
-                            <div className="flex items-center gap-3">
-                              <div>
-                                <span className="font-bold text-slate-800 dark:text-slate-100 block">{o.user.name}</span>
-                                <span className="text-[10px] text-slate-500 block mt-0.5">{o.user.email}</span>
-                                {o.user.phone && (
-                                  <span className="text-[9px] font-mono text-slate-400 block mt-0.5">📱 {o.user.phone}</span>
-                                )}
-                              </div>
-                              <button
-                                onClick={() => setWhatsappOrder(o)}
-                                className="p-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition shrink-0 flex items-center justify-center shadow shadow-emerald-500/10"
-                                title="Send WhatsApp Notification"
-                              >
-                                <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
-                                  <path d="M17.472 14.382c-.022-.08-.124-.184-.245-.244-.12-.06-1.08-.534-1.246-.593-.166-.06-.286-.09-.406.09-.12.18-.46.593-.564.712-.1.12-.2.13-.36.07-.16-.06-.68-.25-1.29-.8-1.15-1.02-1.92-2.28-2.15-2.67-.22-.39-.02-.6.18-.79.18-.18.4-.41.56-.62.16-.2.22-.34.33-.56.11-.22.06-.41-.03-.56-.08-.15-.71-1.72-1.03-2.48-.3-.72-.6-1.11-.8-1.11H8.08c-.24 0-.45.09-.62.27-.18.18-.68.66-.68 1.62s.48 1.88.55 2c.07.08 1.52 2.33 3.69 3.3.52.23.93.37 1.25.48.52.16 1 .14 1.37.08.41-.06 1.24-.5 1.42-1 .18-.5.18-.93.13-1-.05-.07-.18-.11-.36-.17zm2.14-11.75C17.15 1.01 14.21 0 11.18 0 5.03 0 .03 5.03.03 11.18c0 1.97.51 3.9 1.5 5.6L0 24l7.4-1.94c1.64.9 3.47 1.37 5.34 1.37 6.15 0 11.15-5.03 11.15-11.18 0-2.98-1.16-5.79-3.28-7.82zM12.4 21.64c-1.68 0-3.32-.45-4.75-1.3l-.34-.2-4.4 1.15 1.18-4.28-.22-.35c-.93-1.48-1.42-3.2-1.42-4.98 0-5.1 4.14-9.24 9.25-9.24 2.48 0 4.8.97 6.55 2.73 1.76 1.76 2.73 4.1 2.73 6.55-.02 5.1-4.16 9.23-9.27 9.23z" />
-                                </svg>
-                              </button>
-                            </div>
-                          </td>
-                          <td className="p-4">
-                            <div className="space-y-1">
-                              {o.items.map((item) => (
-                                <div key={item.id} className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 flex flex-wrap items-center gap-1.5">
-                                  <span>
-                                    {item.productVariant.product.name} ({item.productVariant.size}) x <span className="font-extrabold text-bakery-600">{item.quantity}</span>
-                                  </span>
-                                  {item.couponApplied > 0 && (
-                                    <span className="inline-flex items-center gap-0.5 text-[9px] font-extrabold text-emerald-700 bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 px-1.5 py-0.5 rounded animate-pulse">
-                                      🎁 Coupon (x{item.couponApplied})
-                                    </span>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </td>
-                          <td className="p-4">
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                              o.status === 'PENDING' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' :
-                              o.status === 'CONFIRMED' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' :
-                              o.status === 'IN_PRODUCTION' ? 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300' :
-                              o.status === 'BAKED' ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300' :
-                              'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                            }`}>
-                              {o.status}
-                            </span>
-                          </td>
-                          <td className="p-4 flex gap-1 justify-end">
-                            {['PENDING', 'CONFIRMED', 'IN_PRODUCTION', 'BAKED', 'COMPLETED'].map((st) => {
-                              const isUpdating = updatingOrderIds.includes(o.id);
-                              return (
-                                <button
-                                  key={st}
-                                  disabled={isUpdating}
-                                  onClick={() => handleOrderStatus(o.id, st)}
-                                  className={`px-2 py-1 text-[9px] font-black rounded flex items-center gap-1 transition-all ${
-                                    o.status === st 
-                                      ? 'bg-bakery-500 text-white' 
-                                      : 'bg-slate-200 dark:bg-slate-800 text-slate-500 hover:bg-slate-300'
-                                  } ${isUpdating ? 'opacity-60 cursor-not-allowed' : ''}`}
-                                >
-                                  {updatingOrderIds.includes(`${o.id}-${st}`) && (
-                                    <RotateCw className="w-2.5 h-2.5 animate-spin" />
-                                  )}
-                                  {st.replace('_', ' ')}
-                                </button>
-                              );
-                            })}
-                          </td>
-                        </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+          <OrdersTab
+            t={t}
+            orders={orders}
+            batches={batches}
+            updatingOrderIds={updatingOrderIds}
+            selectedOrdersForBatch={selectedOrdersForBatch}
+            setSelectedOrdersForBatch={setSelectedOrdersForBatch}
+            batchActionType={batchActionType}
+            setBatchActionType={setBatchActionType}
+            bakeDate={bakeDate}
+            setBakeDate={setBakeDate}
+            selectedExistingBatchId={selectedExistingBatchId}
+            setSelectedExistingBatchId={setSelectedExistingBatchId}
+            toggleOrderSelection={toggleOrderSelection}
+            generateBatch={generateBatch}
+            formatSlotLabel={formatSlotLabel}
+            setRescheduleOrder={setRescheduleOrder}
+            setRescheduleDate={setRescheduleDate}
+            setShowRescheduleModal={setShowRescheduleModal}
+            handleUnbatchOrder={handleUnbatchOrder}
+            handleDeleteOrder={handleDeleteOrder}
+            setWhatsappOrder={setWhatsappOrder}
+            handleOrderStatus={handleOrderStatus}
+            showInternalOrderModal={showInternalOrderModal}
+            setShowInternalOrderModal={setShowInternalOrderModal}
+            starters={starters}
+          />
         )}
 
         {/* 6. PRODUCTION BATCH LIST PANEL */}
