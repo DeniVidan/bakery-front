@@ -242,25 +242,25 @@ export default function OverviewTab({
       {/* Quick Metrics Widget */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="glass-card rounded-2xl p-5 border border-slate-200 dark:border-slate-800/60 shadow">
-          <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400">{t('totalActiveOrders')}</span>
+          <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400">{t('totalActiveOrders', { defaultValue: 'Total Active Orders' })}</span>
           <div className="flex items-baseline gap-2 mt-1">
             <span className="text-2xl font-black text-slate-800 dark:text-slate-100">{calculations ? calculations.summary.totalActiveOrders : 0}</span>
-            <span className="text-[10px] text-slate-400 font-bold">{t('ordersLabel')}</span>
+            <span className="text-[10px] text-slate-400 font-bold">{t('ordersLabel', { defaultValue: 'orders' })}</span>
           </div>
         </div>
 
         <div className="glass-card rounded-2xl p-5 border border-slate-200 dark:border-slate-800/60 shadow">
-          <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400">{t('totalProductsBaking')}</span>
+          <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400">{t('totalProductsBaking', { defaultValue: 'Total Products Baking' })}</span>
           <div className="flex items-baseline gap-2 mt-1">
             <span className="text-2xl font-black text-slate-800 dark:text-slate-100">
               {calculations ? calculations.summary.totalProductsCount : 0}
             </span>
-            <span className="text-[10px] text-slate-400 font-bold">{t('itemsLabel')}</span>
+            <span className="text-[10px] text-slate-400 font-bold">{t('itemsLabel', { defaultValue: 'items' })}</span>
           </div>
         </div>
 
         <div className="glass-card rounded-2xl p-5 border border-slate-200 dark:border-slate-800/60 shadow">
-          <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400">{t('cumulFlourKg')}</span>
+          <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400">{t('cumulFlourKg', { defaultValue: 'Cumulative Flour' })}</span>
           <div className="flex items-baseline gap-2 mt-1">
             <span className="text-2xl font-black text-slate-800 dark:text-slate-100">
               {calculations ? (calculations.summary.totalFlourGrams / 1000).toFixed(1) : '0.0'}
@@ -270,7 +270,7 @@ export default function OverviewTab({
         </div>
 
         <div className="glass-card rounded-2xl p-5 border border-slate-200 dark:border-slate-800/60 shadow">
-          <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400">{t('totalEstDoughWeight')}</span>
+          <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400">{t('totalEstDoughWeight', { defaultValue: 'Est. Dough Weight' })}</span>
           <div className="flex items-baseline gap-2 mt-1">
             <span className="text-2xl font-black text-slate-800 dark:text-slate-100">
               {calculations ? (calculations.summary.totalDoughWeightGrams / 1000).toFixed(1) : '0.0'}
@@ -374,7 +374,7 @@ export default function OverviewTab({
                           <div key={idx} className="flex justify-between items-center text-xs pb-1.5 border-b border-slate-100 dark:border-slate-850 last:border-0 last:pb-0">
                             <div className="flex flex-col">
                               <span className="font-semibold text-slate-700 dark:text-slate-300">{item.name}</span>
-                              <span className="text-[9px] text-slate-400 font-mono">{(item.weightGrams >= 1000 ? `${item.weightKg.toFixed(2)} kg` : `${Math.round(item.weightGrams)} g`)} @ € {item.unitCost.toFixed(2)}/kg</span>
+                              <span className="text-[9px] text-slate-400 font-mono">{(item.weightGrams >= 1000 ? `${(Math.ceil(item.weightGrams) / 1000).toFixed(3)} kg` : `${Math.ceil(item.weightGrams)} g`)} @ € {item.unitCost.toFixed(2)}/kg</span>
                             </div>
                             <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
                               € {item.totalCost.toFixed(2)}
@@ -403,11 +403,11 @@ export default function OverviewTab({
                 {calculations.summary.startersBreakdown.map((sb) => {
                   const activeStarterName = starterOverrides[sb.name] || sb.name;
                   const isStandard = activeStarterName === 'Standard Sourdough Starter';
-                  const target = Math.round(sb.grams);
+                  const target = Math.ceil(sb.grams);
                   if (target <= 0) return null;
 
                   // Scale target tonight by starterWasteFactor to cover transfer/scraping loss:
-                  const scaledTarget = Math.round(target * (1 + (starterWasteFactor / 100)));
+                  const scaledTarget = Math.ceil(target * (1 + (starterWasteFactor / 100)));
                   const reserveVal = parseFloat(starterReserve) || 0;
                   const seedVal = parseFloat(availableStarterSeed) || 0;
                   const totalTarget = scaledTarget + reserveVal;
@@ -690,7 +690,7 @@ export default function OverviewTab({
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="p-3.5 rounded-xl bg-orange-50/50 dark:bg-orange-950/10 border border-orange-200/30 text-center">
                 <span className="text-[10px] uppercase tracking-wider font-extrabold text-orange-600 block">{t('flourRequired')}</span>
-                <span className="text-base font-black text-slate-800 dark:text-white mt-1 block">{(Math.round(calculations.summary.totalFlourGrams * 10) / 10).toLocaleString()} g</span>
+                <span className="text-base font-black text-slate-800 dark:text-white mt-1 block">{Math.ceil(calculations.summary.totalFlourGrams).toLocaleString()} g</span>
                 <span className="text-[9px] text-slate-400 block mt-0.5">{(calculations.summary.totalFlourGrams / 1000).toFixed(3)} kg</span>
                 {(() => {
                   const flourShortages = getBatchShortages().filter(s => s.name !== 'Salt' && s.name !== 'Sourdough Starter');
@@ -704,13 +704,13 @@ export default function OverviewTab({
 
               <div className="p-3.5 rounded-xl bg-blue-50/50 dark:bg-blue-950/10 border border-blue-200/30 text-center">
                 <span className="text-[10px] uppercase tracking-wider font-extrabold text-blue-600 block">{t('waterRequired')}</span>
-                <span className="text-base font-black text-slate-800 dark:text-white mt-1 block">{(Math.round(calculations.summary.totalWaterGrams * 10) / 10).toLocaleString()} g</span>
+                <span className="text-base font-black text-slate-800 dark:text-white mt-1 block">{Math.ceil(calculations.summary.totalWaterGrams).toLocaleString()} g</span>
                 <span className="text-[9px] text-slate-400 block mt-0.5">{(calculations.summary.totalWaterGrams / 1000).toFixed(3)} L</span>
               </div>
 
               <div className="p-3.5 rounded-xl bg-amber-50/50 dark:bg-amber-950/10 border border-amber-200/30 text-center">
                 <span className="text-[10px] uppercase tracking-wider font-extrabold text-amber-600 block">{t('starterLeaven')}</span>
-                <span className="text-base font-black text-slate-800 dark:text-white mt-1 block">{(Math.round(calculations.summary.totalStarterGrams * 10) / 10).toLocaleString()} g</span>
+                <span className="text-base font-black text-slate-800 dark:text-white mt-1 block">{Math.ceil(calculations.summary.totalStarterGrams).toLocaleString()} g</span>
                 <span className="text-[9px] text-slate-400 block mt-0.5">{(calculations.summary.totalStarterGrams / 1000).toFixed(3)} kg</span>
                 {(() => {
                   const starterShortage = getBatchShortages().find(s => s.name === 'Sourdough Starter');
@@ -724,7 +724,7 @@ export default function OverviewTab({
 
               <div className="p-3.5 rounded-xl bg-slate-100/50 dark:bg-slate-800/10 border border-slate-300/30 text-center">
                 <span className="text-[10px] uppercase tracking-wider font-extrabold text-slate-600 block">{t('fineSeaSalt')}</span>
-                <span className="text-base font-black text-slate-800 dark:text-white mt-1 block">{(Math.round(calculations.summary.totalSaltGrams * 10) / 10).toLocaleString()} g</span>
+                <span className="text-base font-black text-slate-800 dark:text-white mt-1 block">{Math.ceil(calculations.summary.totalSaltGrams).toLocaleString()} g</span>
                 <span className="text-[9px] text-slate-400 block mt-0.5">{(calculations.summary.totalSaltGrams / 1000).toFixed(3)} kg</span>
                 {(() => {
                   const saltShortage = getBatchShortages().find(s => s.name === 'Salt');
@@ -745,7 +745,7 @@ export default function OverviewTab({
                     🌾 {t('flourTypesBreakdown', { defaultValue: 'Flour Types Breakdown' })}
                   </span>
                   <span className="text-[10px] font-bold text-slate-400">
-                    {t('totalFlour', { defaultValue: 'Total Flour' })}: <strong className="font-mono text-slate-700 dark:text-slate-200">{(Math.round(calculations.summary.totalFlourGrams * 10) / 10).toLocaleString()} g</strong>
+                    {t('totalFlour', { defaultValue: 'Total Flour' })}: <strong className="font-mono text-slate-700 dark:text-slate-200">{Math.ceil(calculations.summary.totalFlourGrams).toLocaleString()} g</strong>
                   </span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
@@ -763,12 +763,12 @@ export default function OverviewTab({
                         <div className="flex justify-between items-center w-full">
                           <span className="font-bold text-slate-800 dark:text-slate-200">{fb.name}</span>
                           <span className="font-black text-amber-600 dark:text-amber-400 font-mono text-sm">
-                            {(Math.round(fb.grams * 10) / 10).toLocaleString()} g
+                            {Math.ceil(fb.grams).toLocaleString()} g
                           </span>
                         </div>
                         {shortItem && (
                           <div className="text-[9px] text-amber-600 dark:text-amber-400 font-black mt-2 pt-1.5 border-t border-amber-500/10 flex items-center gap-1">
-                            <span>⚠️ Short: {(Math.round(shortItem.shortKg * 1000 * 10) / 10).toLocaleString()} g</span>
+                            <span>⚠️ Short: {Math.ceil(shortItem.shortKg * 1000).toLocaleString()} g</span>
                           </div>
                         )}
                       </div>
@@ -801,12 +801,12 @@ export default function OverviewTab({
                         <div className="flex justify-between items-center w-full">
                           <span className="font-bold text-slate-800 dark:text-slate-200">{extra.name}</span>
                           <span className="font-black text-bakery-600 dark:text-bakery-400 font-mono text-sm">
-                            {(Math.round(extra.grams * 10) / 10).toLocaleString()} g
+                            {Math.ceil(extra.grams).toLocaleString()} g
                           </span>
                         </div>
                         {shortExtra && (
                           <div className="text-[9px] text-amber-600 dark:text-amber-400 font-black mt-2 pt-1.5 border-t border-amber-500/10 flex items-center gap-1">
-                            <span>⚠️ Short: {(Math.round(shortExtra.shortKg * 1000 * 10) / 10).toLocaleString()} g</span>
+                            <span>⚠️ Short: {Math.ceil(shortExtra.shortKg * 1000).toLocaleString()} g</span>
                           </div>
                         )}
                       </div>
@@ -837,7 +837,7 @@ export default function OverviewTab({
             {/* Cumulative Dough Weight */}
             <div className="flex items-center justify-between text-xs p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white/40 dark:bg-slate-900/20 shadow-sm animate-rise">
               <span className="font-bold text-slate-500">{t('estCumulativeDough', { defaultValue: 'Estimated Cumulative Dough Weight' })}</span>
-              <span className="font-black text-bakery-600 dark:text-bakery-400 text-sm">{(Math.round(calculations.summary.totalDoughWeightGrams * 10) / 10).toLocaleString()} g ({(calculations.summary.totalDoughWeightGrams / 1000).toFixed(3)} kg)</span>
+              <span className="font-black text-bakery-600 dark:text-bakery-400 text-sm">{Math.ceil(calculations.summary.totalDoughWeightGrams).toLocaleString()} g ({(calculations.summary.totalDoughWeightGrams / 1000).toFixed(3)} kg)</span>
             </div>
           </div>
 
@@ -997,7 +997,7 @@ export default function OverviewTab({
                               {group.productNames.join(" & ")}
                             </span>
                             <span className="text-[10px] font-black uppercase tracking-wider bg-bakery-500/10 dark:bg-bakery-500/20 text-bakery-600 dark:text-bakery-400 px-2.5 py-1 rounded-full whitespace-nowrap">
-                              {t('totalBatchWeight', { defaultValue: 'Batch' })}: {(Math.round(totalBatchWeight * 10) / 10).toLocaleString()} g
+                              {t('totalBatchWeight', { defaultValue: 'Batch' })}: {Math.ceil(totalBatchWeight).toLocaleString()} g
                             </span>
                           </div>
                           <div className="flex items-center gap-1.5 flex-wrap mt-1">
@@ -1012,25 +1012,25 @@ export default function OverviewTab({
                           <div className="p-2.5 rounded-xl bg-white dark:bg-slate-950 border border-slate-200/50 dark:border-slate-800/50 flex justify-between">
                             <span className="font-semibold text-slate-400">{t('totalFlour')}</span>
                             <span className="font-bold text-slate-800 dark:text-white">
-                              {(Math.round(group.flour * 10) / 10).toLocaleString()} g
+                              {Math.ceil(group.flour).toLocaleString()} g
                             </span>
                           </div>
                           <div className="p-2.5 rounded-xl bg-white dark:bg-slate-950 border border-slate-200/50 dark:border-slate-800/50 flex justify-between">
                             <span className="font-semibold text-slate-400">{t('totalWater')}</span>
                             <span className="font-bold text-slate-800 dark:text-white">
-                              {(Math.round(group.water * 10) / 10).toLocaleString()} g
+                              {Math.ceil(group.water).toLocaleString()} g
                             </span>
                           </div>
                           <div className="p-2.5 rounded-xl bg-white dark:bg-slate-950 border border-slate-200/50 dark:border-slate-800/50 flex justify-between">
                             <span className="font-semibold text-slate-400">{t('totalStarter')}</span>
                             <span className="font-bold text-slate-800 dark:text-white">
-                              {(Math.round(group.starter * 10) / 10).toLocaleString()} g
+                              {Math.ceil(group.starter).toLocaleString()} g
                             </span>
                           </div>
                           <div className="p-2.5 rounded-xl bg-white dark:bg-slate-950 border border-slate-200/50 dark:border-slate-800/50 flex justify-between">
                             <span className="font-semibold text-slate-400">{t('totalSalt')}</span>
                             <span className="font-bold text-slate-800 dark:text-white">
-                              {(Math.round(group.salt * 10) / 10).toLocaleString()} g
+                              {Math.ceil(group.salt).toLocaleString()} g
                             </span>
                           </div>
                         </div>
@@ -1042,7 +1042,7 @@ export default function OverviewTab({
                             <div className="flex flex-wrap gap-2">
                               {Object.entries(group.floursBreakdown).map(([fName, fGrams]) => (
                                 <span key={fName} className="text-[10px] bg-white dark:bg-slate-950 border border-slate-200/40 dark:border-slate-800/40 px-2 py-1 rounded-lg font-bold text-slate-600 dark:text-slate-300">
-                                  {fName}: {(Math.round(fGrams * 10) / 10).toLocaleString()} g
+                                  {fName}: {Math.ceil(fGrams).toLocaleString()} g
                                 </span>
                               ))}
                             </div>
@@ -1056,7 +1056,7 @@ export default function OverviewTab({
                             <div className="flex flex-wrap gap-2">
                               {Object.entries(group.extraIngredients).map(([extName, extGrams]) => (
                                 <span key={extName} className="text-[10px] bg-white dark:bg-slate-950 border border-slate-200/40 dark:border-slate-800/40 px-2 py-1 rounded-lg font-bold text-bakery-600 dark:text-bakery-400">
-                                  {extName}: {(Math.round(extGrams * 10) / 10).toLocaleString()} g
+                                  {extName}: {Math.ceil(extGrams).toLocaleString()} g
                                 </span>
                               ))}
                             </div>
@@ -1095,7 +1095,7 @@ export default function OverviewTab({
                                 {v.productName} ({v.size}) x <strong className="font-extrabold text-slate-800 dark:text-slate-200">{v.quantity}</strong>
                               </span>
                               <span className="font-bold text-bakery-600 dark:text-bakery-400">
-                                ⚖️ {t('portionWeight', { defaultValue: 'Portion' })}: {Math.round(v.singleDoughWeight).toLocaleString()} g
+                                ⚖️ {t('portionWeight', { defaultValue: 'Portion' })}: {Math.ceil(v.singleDoughWeight).toLocaleString()} g
                               </span>
                             </div>
                           ))}
@@ -1297,7 +1297,7 @@ export default function OverviewTab({
                       />
                       <label htmlFor={`shortage-${idx}`} className="font-semibold text-slate-700 dark:text-slate-200 flex items-center justify-between w-full cursor-pointer select-none">
                         <span>{s.name}</span>
-                        <strong className="font-mono text-amber-600 dark:text-amber-400 font-extrabold">{s.shortKg >= 1.0 ? `${s.shortKg.toFixed(2)} kg` : `${Math.round(s.shortKg * 1000)} g`}</strong>
+                        <strong className="font-mono text-amber-600 dark:text-amber-400 font-extrabold">{s.shortKg >= 1.0 ? `${(Math.ceil(s.shortKg * 1000) / 1000).toFixed(3)} kg` : `${Math.ceil(s.shortKg * 1000)} g`}</strong>
                       </label>
                     </div>
                   ))}
@@ -1324,14 +1324,14 @@ export default function OverviewTab({
                     {pb.floursBreakdown && Object.keys(pb.floursBreakdown).length > 0 && (
                       <div className="text-[9px] text-amber-600 dark:text-amber-400 mt-1 space-y-0.5 font-medium">
                         {Object.entries(pb.floursBreakdown).map(([fName, fGrams]) => (
-                          <div key={fName}>🌾 {fName}: {(Math.round(fGrams * 10) / 10).toLocaleString()} g</div>
+                          <div key={fName}>🌾 {fName}: {Math.ceil(fGrams).toLocaleString()} g</div>
                         ))}
                       </div>
                     )}
                   </div>
                   <div className="text-right">
                     <span className="bg-bakery-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full block">Qty: {pb.quantity}</span>
-                    <span className="text-[9px] text-slate-400 mt-1 block">{(Math.round((pb.flour + pb.water + pb.starter + pb.salt + Object.values(pb.extraIngredients).reduce((a, b) => a + Number(b || 0), 0)) * 10) / 10).toLocaleString()} g</span>
+                    <span className="text-[9px] text-slate-400 mt-1 block">{Math.ceil(pb.flour + pb.water + pb.starter + pb.salt + Object.values(pb.extraIngredients).reduce((a, b) => a + Number(b || 0), 0)).toLocaleString()} g</span>
                   </div>
                 </div>
               ))}

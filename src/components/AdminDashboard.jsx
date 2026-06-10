@@ -2282,7 +2282,7 @@ export default function AdminDashboard() {
     const feedingFloursMap = {};
     if (calculations.summary.startersBreakdown && calculations.summary.startersBreakdown.length > 0) {
       calculations.summary.startersBreakdown.forEach((sb) => {
-        const target = Math.round(sb.grams);
+        const target = Math.ceil(sb.grams);
         if (target <= 0) return;
 
         const activeStarterName = starterOverrides[sb.name] || sb.name;
@@ -2467,7 +2467,7 @@ export default function AdminDashboard() {
     const feedingFloursMap = {};
     if (calculations.summary.startersBreakdown && calculations.summary.startersBreakdown.length > 0) {
       calculations.summary.startersBreakdown.forEach((sb) => {
-        const target = Math.round(sb.grams);
+        const target = Math.ceil(sb.grams);
         if (target <= 0) return;
 
         const activeStarterName = starterOverrides[sb.name] || sb.name;
