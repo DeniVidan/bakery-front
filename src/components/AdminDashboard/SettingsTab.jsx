@@ -607,17 +607,7 @@ export default function SettingsTab({
                             min="1"
                             max="168"
                             value={rosterCutoff}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === "") {
-                                setRosterCutoff("");
-                              } else {
-                                const parsed = parseInt(val, 10);
-                                if (!isNaN(parsed) && parsed >= 1) {
-                                  setRosterCutoff(parsed);
-                                }
-                              }
-                            }}
+                            onChange={(e) => setRosterCutoff(e.target.value)}
                             className="p-2.5 w-24 text-xs rounded-xl border dark:bg-slate-950 dark:border-slate-800 bg-white font-semibold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-bakery-500/20 focus:border-bakery-500"
                           />
                           <span className="text-xs text-slate-500 font-semibold">hours</span>
@@ -1024,7 +1014,7 @@ export default function SettingsTab({
                           value={item.percentage}
                           onChange={(e) => {
                             const list = [...tempStarterFlours];
-                            list[fIdx].percentage = parseInt(e.target.value) || 0;
+                            list[fIdx].percentage = e.target.value;
                             setTempStarterFlours(list);
                           }}
                           className="w-12 text-[11px] p-1.5 border rounded-lg dark:bg-slate-950 font-bold text-center dark:bg-slate-900 dark:text-slate-100"
@@ -1046,10 +1036,10 @@ export default function SettingsTab({
 
                 <div className="text-[10px] font-bold text-slate-500 flex items-center gap-2 pt-1.5">
                   <span>{t('totalPercentage', { defaultValue: 'Total composition' })}:</span>
-                  <span className={tempStarterFlours.reduce((sum, f) => sum + (f.percentage || 0), 0) === 100 ? 'text-emerald-500 bg-emerald-500/5 px-2 py-0.5 rounded-md' : 'text-rose-500 bg-rose-500/5 px-2 py-0.5 rounded-md'}>
-                    {tempStarterFlours.reduce((sum, f) => sum + (f.percentage || 0), 0)}%
+                  <span className={tempStarterFlours.reduce((sum, f) => sum + (parseFloat(f.percentage) || 0), 0) === 100 ? 'text-emerald-500 bg-emerald-500/5 px-2 py-0.5 rounded-md' : 'text-rose-500 bg-rose-500/5 px-2 py-0.5 rounded-md'}>
+                    {tempStarterFlours.reduce((sum, f) => sum + (parseFloat(f.percentage) || 0), 0)}%
                   </span>
-                  {tempStarterFlours.reduce((sum, f) => sum + (f.percentage || 0), 0) !== 100 && (
+                  {tempStarterFlours.reduce((sum, f) => sum + (parseFloat(f.percentage) || 0), 0) !== 100 && (
                     <span className="text-rose-400 font-normal">(must sum to exactly 100%)</span>
                   )}
                 </div>
@@ -1064,7 +1054,7 @@ export default function SettingsTab({
                       alert('Starter name is required.');
                       return;
                     }
-                    const sum = tempStarterFlours.reduce((acc, curr) => acc + (curr.percentage || 0), 0);
+                    const sum = tempStarterFlours.reduce((acc, curr) => acc + (parseFloat(curr.percentage) || 0), 0);
                     if (sum !== 100) {
                       alert(`The feeding flours percentages must sum to exactly 100% (currently ${sum}%).`);
                       return;
@@ -1075,6 +1065,11 @@ export default function SettingsTab({
                     const finalFlour = tempFlourParts === "" ? 2.0 : parseFloat(tempFlourParts);
                     const finalWater = tempWaterParts === "" ? 2.0 : parseFloat(tempWaterParts);
 
+                    const cleanFlours = tempStarterFlours.map(f => ({
+                      name: f.name,
+                      percentage: parseFloat(f.percentage) || 0
+                    }));
+
                     if (editingStarterId === 'new') {
                       const newStarter = {
                         id: `starter-${Date.now()}`,
@@ -1082,7 +1077,7 @@ export default function SettingsTab({
                         seedParts: finalSeed,
                         flourParts: finalFlour,
                         waterParts: finalWater,
-                        floursBreakdown: tempStarterFlours,
+                        floursBreakdown: cleanFlours,
                         feedingMethod: tempFeedingMethod
                       };
                       updated = [...starters, newStarter];
@@ -1095,7 +1090,7 @@ export default function SettingsTab({
                             seedParts: finalSeed,
                             flourParts: finalFlour,
                             waterParts: finalWater,
-                            floursBreakdown: tempStarterFlours,
+                            floursBreakdown: cleanFlours,
                             feedingMethod: tempFeedingMethod
                           };
                         }

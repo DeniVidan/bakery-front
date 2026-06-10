@@ -285,6 +285,7 @@ export default function AdminDashboard() {
   // Internal guest order states
   const [showInternalOrderModal, setShowInternalOrderModal] = useState(false);
   const [internalOrderCustomer, setInternalOrderCustomer] = useState({ name: '', phone: '', email: '' });
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [internalOrderItems, setInternalOrderItems] = useState([{ productVariantId: '', quantity: 1 }]);
   const [internalOrderSlot, setInternalOrderSlot] = useState('');
 
@@ -772,6 +773,31 @@ export default function AdminDashboard() {
       });
     }
   }, [activeTab, selectedDispatchBatchId, orders]);
+
+  useEffect(() => {
+    const handleDocumentClick = (e) => {
+      if (!e.target.closest('.guest-name-container')) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleDocumentClick);
+    return () => document.removeEventListener('mousedown', handleDocumentClick);
+  }, []);
+
+  const handleSelectSuggestion = (user) => {
+    const hasDummyEmail = user.email && (user.email.includes('@internal.bakery.com') || user.email.includes('@internal.'));
+    setInternalOrderCustomer({
+      name: user.name || '',
+      phone: user.phone || '',
+      email: hasDummyEmail ? '' : (user.email || '')
+    });
+    setShowSuggestions(false);
+  };
+
+  const handleClearCustomerInfo = () => {
+    setInternalOrderCustomer({ name: '', phone: '', email: '' });
+    setShowSuggestions(false);
+  };
 
   const fetchUsers = async () => {
     try {
@@ -2271,13 +2297,15 @@ export default function AdminDashboard() {
 
         const isStandard = activeStarterName === 'Standard Sourdough Starter';
         const isMethodB = profile.feedingMethod === 'method-b';
-        const totalTarget = target + starterReserve;
+        const reserveVal = parseFloat(starterReserve) || 0;
+        const seedVal = parseFloat(availableStarterSeed) || 0;
+        const totalTarget = target + reserveVal;
 
         let feedFlour = 0;
 
         if (isMethodB) {
-          if (availableStarterSeed < totalTarget) {
-            const remainingWeight = totalTarget - availableStarterSeed;
+          if (seedVal < totalTarget) {
+            const remainingWeight = totalTarget - seedVal;
             const flourPart = profile.flourParts || 2;
             const waterPart = profile.waterParts || 2;
             const totalFeedParts = flourPart + waterPart;
@@ -2454,13 +2482,15 @@ export default function AdminDashboard() {
 
         const isStandard = activeStarterName === 'Standard Sourdough Starter';
         const isMethodB = profile.feedingMethod === 'method-b';
-        const totalTarget = target + starterReserve;
+        const reserveVal = parseFloat(starterReserve) || 0;
+        const seedVal = parseFloat(availableStarterSeed) || 0;
+        const totalTarget = target + reserveVal;
 
         let feedFlour = 0;
 
         if (isMethodB) {
-          if (availableStarterSeed < totalTarget) {
-            const remainingWeight = totalTarget - availableStarterSeed;
+          if (seedVal < totalTarget) {
+            const remainingWeight = totalTarget - seedVal;
             const flourPart = profile.flourParts || 2;
             const waterPart = profile.waterParts || 2;
             const totalFeedParts = flourPart + waterPart;
@@ -3102,7 +3132,7 @@ export default function AdminDashboard() {
                                     } else {
                                       const hydration = parseFloat(raw);
                                       if (!isNaN(hydration)) {
-                                        setBakersPercentages({ ...bakersPercentages, hydration });
+                                        setBakersPercentages({ ...bakersPercentages, hydration: raw });
                                         const updated = applyBakersPercentagesToVariants(hydration, bakersPercentages.starter, bakersPercentages.salt, bakersPercentages.extraIngredients);
                                         setNewProduct({ ...newProduct, variants: updated });
                                       }
@@ -3128,7 +3158,7 @@ export default function AdminDashboard() {
                                     } else {
                                       const starter = parseFloat(raw);
                                       if (!isNaN(starter)) {
-                                        setBakersPercentages({ ...bakersPercentages, starter });
+                                        setBakersPercentages({ ...bakersPercentages, starter: raw });
                                         const updated = applyBakersPercentagesToVariants(bakersPercentages.hydration, starter, bakersPercentages.salt, bakersPercentages.extraIngredients);
                                         setNewProduct({ ...newProduct, variants: updated });
                                       }
@@ -3154,7 +3184,7 @@ export default function AdminDashboard() {
                                     } else {
                                       const salt = parseFloat(raw);
                                       if (!isNaN(salt)) {
-                                        setBakersPercentages({ ...bakersPercentages, salt });
+                                        setBakersPercentages({ ...bakersPercentages, salt: raw });
                                         const updated = applyBakersPercentagesToVariants(bakersPercentages.hydration, bakersPercentages.starter, salt, bakersPercentages.extraIngredients);
                                         setNewProduct({ ...newProduct, variants: updated });
                                       }
@@ -3257,7 +3287,7 @@ export default function AdminDashboard() {
                                           step="0.1"
                                           placeholder="%"
                                           value={ext.percentage}
-                                          onChange={(e) => updateExtraPercentageRow(extIdx, 'percentage', parseFloat(e.target.value) || 0)}
+                                          onChange={(e) => updateExtraPercentageRow(extIdx, 'percentage', e.target.value)}
                                           className="w-16 text-[11px] p-1.5 border rounded-lg dark:bg-slate-950 dark:border-slate-800 font-bold text-center"
                                         />
                                         <span className="text-slate-400 text-[10px]">%</span>
@@ -3676,8 +3706,7 @@ export default function AdminDashboard() {
                                             placeholder="Weight"
                                             value={ext.grams}
                                             onChange={(e) => {
-                                              const rawVal = e.target.value;
-                                              updateManualExtraIngredient(idx, extIdx, 'grams', rawVal === '' ? '' : (parseFloat(rawVal) || 0));
+                                              updateManualExtraIngredient(idx, extIdx, 'grams', e.target.value);
                                             }}
                                             className="w-12 text-[11px] p-1.5 border rounded-lg dark:bg-slate-950 dark:border-slate-800 font-bold text-center"
                                           />
@@ -4797,15 +4826,7 @@ export default function AdminDashboard() {
                                     min="0"
                                     value={tempVal}
                                     onChange={(e) => {
-                                      const raw = e.target.value;
-                                      if (raw === "") {
-                                        setTempIngredientCosts({ ...tempIngredientCosts, [ing]: "" });
-                                      } else {
-                                        const val = parseFloat(raw);
-                                        if (!isNaN(val) && val >= 0) {
-                                          setTempIngredientCosts({ ...tempIngredientCosts, [ing]: val });
-                                        }
-                                      }
+                                      setTempIngredientCosts({ ...tempIngredientCosts, [ing]: e.target.value });
                                     }}
                                     className="p-1 w-16 text-center text-xs rounded-lg border dark:bg-slate-950 dark:border-slate-800 bg-white font-mono font-bold text-slate-800 dark:text-slate-100"
                                   />
@@ -6485,14 +6506,63 @@ export default function AdminDashboard() {
                     <label className="text-[10px] uppercase tracking-wider text-slate-700 dark:text-slate-300 block mb-1 font-extrabold">
                       {t('guestName')} *
                     </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. John Neighbor"
-                      value={internalOrderCustomer.name}
-                      onChange={(e) => setInternalOrderCustomer({ ...internalOrderCustomer, name: e.target.value })}
-                      className="w-full text-xs p-3 border rounded-xl bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700 focus:border-bakery-500 focus:ring-2 focus:ring-bakery-500/20 focus:outline-none font-bold text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 shadow-sm transition"
-                    />
+                    <div className="relative guest-name-container w-full">
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. John Neighbor"
+                        value={internalOrderCustomer.name}
+                        onChange={(e) => {
+                          setInternalOrderCustomer({ ...internalOrderCustomer, name: e.target.value });
+                          setShowSuggestions(true);
+                        }}
+                        onFocus={() => setShowSuggestions(true)}
+                        className="w-full text-xs p-3 pr-8 border rounded-xl bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700 focus:border-bakery-500 focus:ring-2 focus:ring-bakery-500/20 focus:outline-none font-bold text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 shadow-sm transition"
+                      />
+                      {internalOrderCustomer.name && (
+                        <button
+                          type="button"
+                          onClick={handleClearCustomerInfo}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition p-1 text-sm font-bold"
+                          title="Clear customer details"
+                        >
+                          ✕
+                        </button>
+                      )}
+                      
+                      {/* Glassmorphic Autocomplete Dropdown */}
+                      {showSuggestions && (() => {
+                        const nameQuery = (internalOrderCustomer.name || '').trim().toLowerCase();
+                        const suggestions = nameQuery.length >= 2 
+                          ? users.filter(u => u.name && u.name.toLowerCase().includes(nameQuery)) 
+                          : [];
+                        if (suggestions.length === 0) return null;
+                        return (
+                          <div className="absolute left-0 right-0 top-full mt-1.5 max-h-56 overflow-y-auto z-50 rounded-xl border border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-950/95 backdrop-blur-md shadow-lg divide-y divide-slate-100 dark:divide-slate-900">
+                            {suggestions.map((u) => {
+                              const isDummy = u.email && (u.email.includes('@internal.bakery.com') || u.email.includes('@internal.'));
+                              return (
+                                <button
+                                  key={u.id || u.email}
+                                  type="button"
+                                  onClick={() => handleSelectSuggestion(u)}
+                                  className="w-full text-left px-4 py-2.5 hover:bg-bakery-500/5 dark:hover:bg-bakery-500/10 flex flex-col transition animate-rise"
+                                >
+                                  <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                                    {u.name}
+                                  </span>
+                                  {(u.phone || (u.email && !isDummy)) && (
+                                    <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 font-semibold">
+                                      {u.phone ? `📞 ${u.phone}` : ''} {u.phone && u.email && !isDummy ? ' • ' : ''} {u.email && !isDummy ? `✉️ ${u.email}` : ''}
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
@@ -6558,7 +6628,7 @@ export default function AdminDashboard() {
                           required
                           min="1"
                           value={item.quantity}
-                          onChange={(e) => updateInternalOrderItemRow(idx, 'quantity', parseInt(e.target.value) || 1)}
+                          onChange={(e) => updateInternalOrderItemRow(idx, 'quantity', e.target.value)}
                           className="w-full text-xs p-2 border rounded-lg text-center font-black bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 shadow-sm text-slate-900 dark:text-slate-100 focus:border-bakery-500 focus:outline-none transition"
                         />
                       </div>
@@ -6603,7 +6673,8 @@ export default function AdminDashboard() {
                 <span className="text-base font-black text-amber-600 dark:text-bakery-400 bg-amber-500/10 dark:bg-bakery-500/10 px-3 py-1 rounded-xl border border-amber-500/20 dark:border-bakery-500/20">
                   ${internalOrderItems.reduce((sum, item) => {
                     const opt = productVariantOptions.find(o => o.id === item.productVariantId);
-                    return sum + (opt ? opt.price * (item.quantity || 1) : 0);
+                    const qVal = parseInt(item.quantity) || 0;
+                    return sum + (opt ? opt.price * qVal : 0);
                   }, 0).toFixed(2)}
                 </span>
               </div>

@@ -408,7 +408,9 @@ export default function OverviewTab({
 
                   // Scale target tonight by starterWasteFactor to cover transfer/scraping loss:
                   const scaledTarget = Math.round(target * (1 + (starterWasteFactor / 100)));
-                  const totalTarget = scaledTarget + starterReserve;
+                  const reserveVal = parseFloat(starterReserve) || 0;
+                  const seedVal = parseFloat(availableStarterSeed) || 0;
+                  const totalTarget = scaledTarget + reserveVal;
 
                   // Find configuration profile
                   const profile = starters.find(s => s.name === activeStarterName) || {
@@ -549,32 +551,32 @@ export default function OverviewTab({
                           {profile.feedingMethod === 'method-b' ? (
                             /* Method B: Use All available seed card */
                             (() => {
-                              if (availableStarterSeed >= totalTarget) {
+                              if (seedVal >= totalTarget) {
                                 return (
                                   <div className="p-4 rounded-2xl border border-emerald-500/10 bg-emerald-500/[0.02] flex flex-col items-center justify-center text-center space-y-1 animate-rise">
                                     <span className="text-xs text-emerald-600 dark:text-emerald-400 font-black uppercase tracking-wider">
                                       ✨ Sufficient Starter: No feeding required
                                     </span>
                                     <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                                      Post-bake reserve: <strong className="text-slate-700 dark:text-slate-200 font-mono">{availableStarterSeed - scaledTarget} g</strong> (Total seed: {availableStarterSeed}g / Target: {totalTarget}g)
+                                      Post-bake reserve: <strong className="text-slate-700 dark:text-slate-200 font-mono">{seedVal - scaledTarget} g</strong> (Total seed: {seedVal}g / Target: {totalTarget}g)
                                     </span>
                                   </div>
                                 );
                               }
 
-                              const remainingWeight = totalTarget - availableStarterSeed;
+                              const remainingWeight = totalTarget - seedVal;
                               const feedFlour = Math.ceil(remainingWeight / 2);
                               const feedWater = Math.ceil(remainingWeight / 2);
 
                               return (
                                 <div className="p-5 rounded-2xl border border-amber-500/15 bg-amber-500/5 dark:bg-amber-950/5 space-y-3 animate-rise">
                                   <span className="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 block">
-                                    ⚡ Method B: Use ALL of your {availableStarterSeed}g Seed
+                                    ⚡ Method B: Use ALL of your {seedVal}g Seed
                                   </span>
                                   <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
                                     <div className="flex justify-between border-b dark:border-slate-800 pb-1.5">
                                       <span>🧪 {t('useStarterSeed', { defaultValue: 'Use ALL Starter Seed' })}:</span>
-                                      <strong className="font-mono text-slate-800 dark:text-slate-100">{availableStarterSeed} g</strong>
+                                      <strong className="font-mono text-slate-800 dark:text-slate-100">{seedVal} g</strong>
                                     </div>
                                     <div className="flex justify-between border-b dark:border-slate-800 pb-1.5">
                                       <span>🥖 {t('addFlour', { defaultValue: 'Add Flour' })}:</span>
