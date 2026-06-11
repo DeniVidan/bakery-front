@@ -198,9 +198,9 @@ export default function AdminDashboard() {
   useEffect(() => {
     setLocalDoughWasteFactor(String(doughWasteFactor));
   }, [doughWasteFactor]);
-  const [starterPresetRatio, setStarterPresetRatio] = useState('1:2:2');
-  const [availableStarterSeed, setAvailableStarterSeed] = useState(100);
-  const [starterReserve, setStarterReserve] = useState(100);
+  const [starterPresetRatio, setStarterPresetRatio] = useState({ 'Standard Sourdough Starter': '1:2:2' });
+  const [availableStarterSeed, setAvailableStarterSeed] = useState({ 'Standard Sourdough Starter': 100 });
+  const [starterReserve, setStarterReserve] = useState({ 'Standard Sourdough Starter': 100 });
   const [starters, setStarters] = useState([]);
   const [editingStarterId, setEditingStarterId] = useState(null); // 'new', 'id', or null
   const [tempStarterName, setTempStarterName] = useState('');
@@ -2287,8 +2287,30 @@ export default function AdminDashboard() {
 
         const isStandard = activeStarterName === 'Standard Sourdough Starter';
         const isMethodB = profile.feedingMethod === 'method-b';
-        const reserveVal = parseFloat(starterReserve) || 0;
-        const seedVal = parseFloat(availableStarterSeed) || 0;
+
+        const getSeedVal = (starterName) => {
+          if (typeof availableStarterSeed === 'object' && availableStarterSeed !== null) {
+            return availableStarterSeed[starterName] !== undefined ? availableStarterSeed[starterName] : 100;
+          }
+          return availableStarterSeed;
+        };
+
+        const getReserveVal = (starterName) => {
+          if (typeof starterReserve === 'object' && starterReserve !== null) {
+            return starterReserve[starterName] !== undefined ? starterReserve[starterName] : 100;
+          }
+          return starterReserve;
+        };
+
+        const getPresetRatioVal = (starterName) => {
+          if (typeof starterPresetRatio === 'object' && starterPresetRatio !== null) {
+            return starterPresetRatio[starterName] !== undefined ? starterPresetRatio[starterName] : '1:2:2';
+          }
+          return starterPresetRatio;
+        };
+
+        const reserveVal = parseFloat(getReserveVal(activeStarterName)) || 0;
+        const seedVal = parseFloat(getSeedVal(activeStarterName)) || 0;
         const totalTarget = target + reserveVal;
 
         let feedFlour = 0;
@@ -2306,12 +2328,11 @@ export default function AdminDashboard() {
           let flourPart = profile.flourParts || 2;
           let waterPart = profile.waterParts || 2;
 
-          if (isStandard) {
-            const parts = starterPresetRatio.split(':').map(p => parseFloat(p));
-            seedPart = parts[0] || 1;
-            flourPart = parts[1] || 2;
-            waterPart = parts[2] || 2;
-          }
+          const ratioStr = getPresetRatioVal(activeStarterName) || `${profile.seedParts || 1}:${profile.flourParts || 2}:${profile.waterParts || 2}`;
+          const parts = ratioStr.split(':').map(p => parseFloat(p));
+          seedPart = parts[0] || 1;
+          flourPart = parts[1] || 2;
+          waterPart = parts[2] || 2;
 
           const sumParts = seedPart + flourPart + waterPart;
           const reqSeed = Math.ceil(totalTarget / sumParts);
@@ -2472,8 +2493,30 @@ export default function AdminDashboard() {
 
         const isStandard = activeStarterName === 'Standard Sourdough Starter';
         const isMethodB = profile.feedingMethod === 'method-b';
-        const reserveVal = parseFloat(starterReserve) || 0;
-        const seedVal = parseFloat(availableStarterSeed) || 0;
+
+        const getSeedVal = (starterName) => {
+          if (typeof availableStarterSeed === 'object' && availableStarterSeed !== null) {
+            return availableStarterSeed[starterName] !== undefined ? availableStarterSeed[starterName] : 100;
+          }
+          return availableStarterSeed;
+        };
+
+        const getReserveVal = (starterName) => {
+          if (typeof starterReserve === 'object' && starterReserve !== null) {
+            return starterReserve[starterName] !== undefined ? starterReserve[starterName] : 100;
+          }
+          return starterReserve;
+        };
+
+        const getPresetRatioVal = (starterName) => {
+          if (typeof starterPresetRatio === 'object' && starterPresetRatio !== null) {
+            return starterPresetRatio[starterName] !== undefined ? starterPresetRatio[starterName] : '1:2:2';
+          }
+          return starterPresetRatio;
+        };
+
+        const reserveVal = parseFloat(getReserveVal(activeStarterName)) || 0;
+        const seedVal = parseFloat(getSeedVal(activeStarterName)) || 0;
         const totalTarget = target + reserveVal;
 
         let feedFlour = 0;
@@ -2491,12 +2534,11 @@ export default function AdminDashboard() {
           let flourPart = profile.flourParts || 2;
           let waterPart = profile.waterParts || 2;
 
-          if (isStandard) {
-            const parts = starterPresetRatio.split(':').map(p => parseFloat(p));
-            seedPart = parts[0] || 1;
-            flourPart = parts[1] || 2;
-            waterPart = parts[2] || 2;
-          }
+          const ratioStr = getPresetRatioVal(activeStarterName) || `${profile.seedParts || 1}:${profile.flourParts || 2}:${profile.waterParts || 2}`;
+          const parts = ratioStr.split(':').map(p => parseFloat(p));
+          seedPart = parts[0] || 1;
+          flourPart = parts[1] || 2;
+          waterPart = parts[2] || 2;
 
           const sumParts = seedPart + flourPart + waterPart;
           const reqSeed = Math.ceil(totalTarget / sumParts);
